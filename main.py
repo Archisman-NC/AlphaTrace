@@ -1,6 +1,8 @@
 import os
 from app.ingestion.data_loader import DataLoader
 from app.analytics.market_intelligence import build_market_intelligence
+from app.analytics.portfolio_loader import load_portfolio
+from app.analytics.portfolio_normalizer import normalize_holdings
 
 def main():
     print("Starting Autonomous Financial Advisor Agent - Intelligence Pipeline...\n")
@@ -42,6 +44,29 @@ def main():
     
     print(f"\nTotal Enriched News Signals: {len(news)}")
     print("--------------------------------------------\n")
+    
+    # Phase 2: Portfolio Selection (First Entry)
+    print("--- Phase 2: Portfolio Intelligence (Loading) ---")
+    for p_id in ["PORTFOLIO_001", "PORTFOLIO_002"]:
+        p_loaded = load_portfolio(loader, p_id)
+        if p_loaded:
+            print(f"[{p_id}] Type: {p_loaded['type'].upper()}")
+            print(f"  > Stocks: {len(p_loaded['stocks'])} | MFs: {len(p_loaded['mutual_funds'])}")
+            
+            # Step 2: Normalize
+            normalized = normalize_holdings(loader, p_loaded)
+            print(f"  > Normalized Holdings: {len(normalized)}")
+            
+            # Step 3: Verify Weight Sum
+            total_weight = sum(h['weight'] for h in normalized.values())
+            print(f"  > Total Stock Weight: {total_weight:.4f}")
+            
+            # Sample 2
+            if normalized:
+                samples = list(normalized.items())[:2]
+                for sym, data in samples:
+                    print(f"    - {sym}: {data['sector']} | Weight: {data['weight']:.4f} | Change: {data['day_change']}%")
+    print("-------------------------------------------------\n")
     
     print("Intelligence Pipeline Execution Successful!")
 
