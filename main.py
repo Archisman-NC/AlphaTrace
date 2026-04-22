@@ -14,6 +14,10 @@ from app.analytics.top_impact_sectors import get_top_impact_sectors
 from app.reasoning.stock_impact_drilldown import get_stock_level_impact
 from app.reasoning.mutual_fund_handler import process_mutual_funds
 from app.evaluation.output_validator import validate_outputs
+from app.reasoning.news_portfolio_link import link_news_to_portfolio
+from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
+from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
+from app.reasoning.causal_chain_builder import build_causal_chains
 
 def main():
     print("Starting Autonomous Financial Advisor Agent - Intelligence Pipeline...\n")
@@ -104,7 +108,19 @@ def main():
         # 12. Reasoning: Mutual Fund Interpretation (PHASE 3)
         mf_reasoning = process_mutual_funds(loader, raw_portfolio, mode="simple")
         
-        # 13. Output Validation (Final Step)
+        # 13. Reasoning: News-Portfolio Linkage (PHASE 3)
+        relevant_news = link_news_to_portfolio(news, exposure, stock_map)
+        
+        # 14. Reasoning: News-Sector Enrichment (PHASE 3)
+        enriched_news = attach_sector_trends_to_news(relevant_news, trends)
+        
+        # 15. Reasoning: Portfolio Exposure Enrichment (PHASE 3)
+        personalized_news = attach_portfolio_exposure(enriched_news, exposure)
+        
+        # 16. Reasoning: Causal Chain Builder (PHASE 3)
+        causal_chains = build_causal_chains(personalized_news, impacts, stock_drivers)
+        
+        # 17. Output Validation (Final Step)
         validation = validate_outputs(exposure, top_impacts, stock_map, risks)
         
         # Display Results
@@ -120,6 +136,39 @@ def main():
         print(f" {v_icon} {validation['summary']}")
         for w in validation["warnings"]:
             print(f"   ! Warning: {w}")
+
+        print("\n[FULL CAUSAL CHAINS]")
+        if causal_chains:
+            for chain in causal_chains[:3]:
+                stocks_str = f"[{', '.join(chain['stocks'])}]" if chain['stocks'] else "[]"
+                print(f" - {chain['news'][:30]}... \u2192 {chain['sector']} \u2192 {chain['sector_change']:+.2f}% \u2192 {chain['portfolio_weight']*100:.1f}% exp \u2192 {stocks_str}")
+        else:
+            print(" - No complete causal chains constructed.")
+        
+        print("\n[NEWS IMPACT BY EXPOSURE]")
+        if personalized_news:
+            for item in sorted(personalized_news, key=lambda x: x['portfolio_weight'], reverse=True)[:3]:
+                print(f" - {item['news'][:50]}... \u2192 {item['sector']}: {item['portfolio_weight']*100:.1f}% exposure")
+        else:
+            print(" - No portfolio-linked news events identified.")
+
+        print("\n[EVENT -> REACTION MAPPING]")
+        if enriched_news:
+            # Show first 3 for brevity
+            for item in enriched_news[:3]:
+                sign = "+" if item['sector_change'] > 0 else ""
+                print(f" - {item['news'][:50]}... \u2192 {item['sector']}: {sign}{item['sector_change']}%")
+        else:
+            print(" - No causal news events identified.")
+
+        print("\n[RELEVANT NEWS SIGNALS]")
+        if relevant_news:
+            for item in relevant_news[:3]: # Show top 3 relevant
+                sentiment_icon = "🔴" if item['sentiment'] == "negative" else "🟢"
+                print(f" {sentiment_icon} {item['headline']}")
+                print(f"    Reason: {item['relevance_reason']}")
+        else:
+            print(" - No direct news impact detected for this portfolio.")
 
         print("\n[REASONING DRILLDOWN: KEY DRIVERS]")
         for sector, stocks in stock_drivers.items():
