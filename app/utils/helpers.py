@@ -1,0 +1,17 @@
+def normalize_sector(sector: str) -> str:
+    """Cleans and normalizes a sector name for strict mapping comparisons."""
+    if not sector:
+        return ""
+    return sector.strip().upper()
+
+def build_stock_to_sector_map(sector_mapping: dict) -> dict:
+    """Builds a flat stock -> sector mapping dictionary from the nested structural JSON payload."""
+    stock_map = {}
+    sectors = sector_mapping.get("sectors", {})
+    
+    for sector_name, details in sectors.items():
+        stocks = details.get("stocks", [])
+        for stock in stocks:
+            stock_map[stock] = normalize_sector(sector_name)
+            
+    return stock_map
