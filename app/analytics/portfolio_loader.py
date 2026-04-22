@@ -49,5 +49,9 @@ def load_portfolio(loader: DataLoader, portfolio_id: str) -> Dict[str, Any]:
         "portfolio_id": p_id,
         "type": portfolio_type,
         "stocks": clean_stocks,
-        "mutual_funds": clean_mf
+        "mutual_funds": clean_mf,
+        "summary": portfolio_data.get("summary", {}),
+        "analytics": portfolio_data.get("analytics", {}),
+        "current_value": portfolio_data.get("current_value", 0),
+        "user_name": portfolio_data.get("user_name", "Unknown")
     }

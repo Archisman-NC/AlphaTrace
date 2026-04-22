@@ -6,17 +6,18 @@ logger = logging.getLogger(__name__)
 def compute_portfolio_metrics(portfolio: dict) -> Dict[str, float]:
     """
     Extracts high-level portfolio performance metrics (Value, PnL, % Change).
-    Prioritizes the 'summary' block found in current mock data.
+    Handles multiple schemas: 'summary' block, 'analytics.day_summary', or top-level.
     """
-    # Step 1 & 2: Extract values from 'summary' block or top-level keys
+    # Try 'summary' block (Portfolios 001, 002)
     summary = portfolio.get("summary", {})
     
-    # Mapping actual mock data keys to the requested internal structure
-    total_value = summary.get("current_value", portfolio.get("total_value", 0))
-    daily_pnl = summary.get("day_pnl", portfolio.get("daily_pnl", 0))
-    daily_change = summary.get("day_change_percent", portfolio.get("daily_change_percent", 0))
+    # Try 'analytics.day_summary' (Portfolio 003)
+    analytics_summary = portfolio.get("analytics", {}).get("day_summary", {})
 
-    # Step 3 & 4: Type Safety and Final Structure
+    total_value = summary.get("current_value", analytics_summary.get("current_value", portfolio.get("current_value", 0)))
+    daily_pnl = summary.get("day_pnl", analytics_summary.get("day_change_absolute", portfolio.get("daily_pnl", 0)))
+    daily_change = summary.get("day_change_percent", analytics_summary.get("day_change_percent", portfolio.get("daily_change_percent", 0)))
+
     try:
         return {
             "total_value": float(total_value),
