@@ -1,5 +1,9 @@
 import os
+from dotenv import load_dotenv
 from langfuse import Langfuse
+
+# Load environment variables early for module-level initialization
+load_dotenv()
 
 def normalize_sector(sector: str) -> str:
     """Cleans and normalizes a sector name for strict mapping comparisons."""
@@ -23,5 +27,5 @@ def build_stock_to_sector_map(sector_mapping: dict) -> dict:
 langfuse = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
     secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-    host="https://cloud.langfuse.com"
+    host=os.getenv("LANGFUSE_BASE_URL", os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
 )

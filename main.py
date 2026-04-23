@@ -1,8 +1,12 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables at the absolute entry point
+load_dotenv()
+
 import json
 import argparse
 from datetime import datetime
-from dotenv import load_dotenv
 from app.ingestion.data_loader import DataLoader
 from app.analytics.market_intelligence import build_market_intelligence
 from app.analytics.portfolio_loader import load_portfolio
