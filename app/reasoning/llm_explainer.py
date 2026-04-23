@@ -34,19 +34,24 @@ def generate_llm_explanation(
         "risks": risks
     }
     
+    # Ensure no UNCLASSIFIED leaks into the prompt
+    clean_payload_str = json.dumps(payload, indent=2).replace("UNCLASSIFIED", "diversified holdings")
+
     # Step 4: System Prompt (Strict JSON)
     system_prompt = """
-You are a quantitative financial reasoning assistant working for AlphaTrace.
-Explain exactly why the portfolio moved based on the provided qualitative and quantitative data.
+You are a financial analyst.
+
+Explain portfolio movement clearly and concisely based purely on the provided quantitative and qualitative data.
 
 Rules:
-* Be concise (3-5 lines).
-* Use clear causal reasoning (News -> Sector -> Stock -> Portfolio Impact).
-* Mention quantitative portfolio exposure when explaining impact.
-* Highlight the top drivers provided.
-* Mention contradictions (conflicts) or risks if they are present in the provided data.
-* Do NOT hallucinate data. Only use the provided payload.
-* Do NOT add extraneous conversational filler.
+* Max 3 sentences
+* Sentence 1: what happened
+* Sentence 2: why (sector + exposure + stocks)
+* Sentence 3: uncertainty/conflict (if any)
+* Use simple, sharp language
+* Avoid long sentences
+* No repetition
+* No filler words
 
 You must return STRICT JSON describing your findings with this exact schema:
 {
@@ -57,7 +62,7 @@ You must return STRICT JSON describing your findings with this exact schema:
 """
 
     # Step 5: User Input
-    user_prompt = f"DATA:\n{json.dumps(payload, indent=2)}"
+    user_prompt = f"DATA:\n{clean_payload_str}"
 
     # Step 6: Groq API Call
     try:

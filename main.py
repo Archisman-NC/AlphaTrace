@@ -133,7 +133,7 @@ def main():
         scored_chains = compute_impact_scores(causal_chains)
         
         # 18. Reasoning: Top Drivers (PHASE 3)
-        top_causal_drivers = select_top_drivers(scored_chains, top_n=3)
+        top_causal_drivers = select_top_drivers(scored_chains, top_n=2)
         
         # 19. Reasoning: Conflict Detector (PHASE 3)
         conflicts = detect_conflicts(causal_chains, normalized_holdings, trends)
@@ -141,6 +141,15 @@ def main():
         # 20. Output Validation (Final Step)
         validation = validate_outputs(exposure, top_impacts, stock_map, risks)
         
+        # Compute Signal Strength Class (Advisory Extension)
+        daily_chg = abs(metrics.get("daily_change_percent", 0.0))
+        if daily_chg < 0.1:
+            sig_class = "weak"
+        elif daily_chg < 1:
+            sig_class = "moderate"
+        else:
+            sig_class = "strong"
+
         # 21. Narrative Generation (Advisory Extension)
         explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks)
         
@@ -156,10 +165,9 @@ def main():
         
         # compute heuristics for confidence
         align_str = sum(abs(v['impact']) for v in top_causal_drivers) if top_causal_drivers else 0
-        sig_str = abs(metrics.get('daily_change_percent', 0))
         
-        confidence = compute_confidence(conflicts, align_str, sig_str)
-        final_output = build_final_output(explanation, eval_score, confidence)
+        confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)))
+        final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
         
         # Display Results
         p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
@@ -189,7 +197,8 @@ def main():
                  print(f"  \u26A0\uFE0F {r}")
                  
         print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100}%")
-        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0)} / 10.0")
+        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0)}")
+        print(f"  [SIGNAL STRENGTH]   {final_output.get('signal_strength', 'unknown').upper()}")
 
         print("\n[TOP QUANTITATIVE DRIVERS]")
         if top_causal_drivers:

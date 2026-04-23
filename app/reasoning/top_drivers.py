@@ -24,12 +24,17 @@ def select_top_drivers(
             continue
 
         try:
-            # Step 5 & 6: Build Output and Clean
+            raw_sector = chain.get("sector", "Unknown Sector")
+            clean_sector = "Diversified Holdings" if raw_sector == "UNCLASSIFIED" else raw_sector
+            
+            raw_stocks = chain.get("stocks", [])
+            clean_stocks = raw_stocks[:2] if isinstance(raw_stocks, list) else []
+
             valid_chains.append({
-                "sector": chain.get("sector", "Unknown Sector"),
+                "sector": clean_sector,
                 "impact": float(impact),
                 "reason": chain.get("news", "Unknown Reason"),
-                "stocks": chain.get("stocks", [])
+                "stocks": clean_stocks
             })
         except (ValueError, TypeError):
             continue

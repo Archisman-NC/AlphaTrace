@@ -62,24 +62,24 @@ def detect_conflicts(
             # CASE 1: Positive news + negative sector or stock
             if news_sentiment == "positive" and (sector_change < 0 or stock_change < 0):
                 if stock_change < 0 and sector_change >= 0:
-                    conflict_reason = f"Positive news and flat/strong sector, but {stock_symbol} declined ({stock_change}%)"
+                    conflict_reason = f"Mixed signals across holdings: positive news but {stock_symbol} declined ({stock_change}%)"
                 else:
-                    conflict_reason = f"Positive fundamental news but negative market reaction"
+                    conflict_reason = f"Mixed signals across holdings: positive fundamental news but negative market reaction"
                     
             # CASE 1 (Symmetric): Negative news + positive sector or stock
             elif news_sentiment == "negative" and (sector_change > 0 or stock_change > 0):
                 if stock_change > 0 and sector_change <= 0:
-                    conflict_reason = f"Negative news and flat/weak sector, but {stock_symbol} rallied (+{stock_change}%)"
+                    conflict_reason = f"Mixed signals across holdings: negative news but {stock_symbol} rallied (+{stock_change}%)"
                 else:
-                    conflict_reason = f"Negative fundamental news but positive market reaction"
+                    conflict_reason = f"Mixed signals across holdings: negative fundamental news but positive market reaction"
                     
             # CASE 2: Sector up + stock down (regardless of news)
             elif sector_change > 0 and stock_change < 0:
-                 conflict_reason = f"{sector} performed well but {stock_symbol} underperformed"
+                 conflict_reason = f"Stock-specific divergence: {sector} performed well but {stock_symbol} underperformed"
                  
             # CASE 2 (Symmetric): Sector down + stock up
             elif sector_change < 0 and stock_change > 0:
-                 conflict_reason = f"{sector} struggled but {stock_symbol} outperformed"
+                 conflict_reason = f"Stock-specific divergence: {sector} trend did not fully reflect {stock_symbol} performance"
                  
             if conflict_reason:
                 # De-duplicate conflicts
