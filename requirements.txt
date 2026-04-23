@@ -1,2 +1,6 @@
 pydantic
 python-dotenv
+groq
+langfuse
+pytest
+gradio

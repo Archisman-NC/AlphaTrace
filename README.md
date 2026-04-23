@@ -142,3 +142,29 @@ The system integrates **Langfuse** for production-grade observability. Every exe
 * **Dynamic Signal Weighting**: Refine the confidence scoring model by weighting signals based on magnitude, temporal relevance, and cross-signal alignment, moving beyond the current heuristic-based thresholds.
 
 * **Real-time Market Integration**: Transition from batch ingestion from mock JSON sources to real-time streams (e.g., via ZeroMQ or WebSocket) for low-latency portfolio monitoring.
+
+---
+
+## Web Interface (Hugging Face Spaces)
+
+AlphaTrace includes a production-ready web interface built with Gradio, allowing users to trigger reasoning cycles and visualize terminal outputs directly in the browser.
+
+### Features
+* **Live Sandbox**: Run analysis on pre-configured portfolios (PORTFOLIO_001, 002, 003, or ALL).
+* **Console Output Capture**: Displays the full internal trace, including P&L metrics, causal drivers, risks, and AI Judge scores.
+* **Observability Integration**: Automatically links generated briefings to Langfuse traces if configured.
+
+### Deployment to Spaces
+1. **New Space**: Create a new Gradio Space on Hugging Face.
+2. **Settings**: Add the following secret environment variables:
+   * `GROQ_API_KEY`: Your Groq platform key.
+   * `LANGFUSE_PUBLIC_KEY`: For telemetry tracing.
+   * `LANGFUSE_SECRET_KEY`: For telemetry tracing.
+3. **Upload**: Push the repository contents (including `app.py`, `main.py`, `data/`, and `app/`).
+
+### Local Execution
+To run the dashboard locally:
+```bash
+python app.py
+```
+The interface will be accessible at `http://localhost:7860`.
