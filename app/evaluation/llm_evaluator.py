@@ -21,7 +21,7 @@ def evaluate_explanation(
     except Exception as e:
         logger.error(f"Failed to initialize Groq client for evaluation: {e}")
         return {
-            "score": 7.0,
+            "score": 0.0,
             "feedback": "Internal Error: Unable to communicate with AI Judge. Default score."
         }
 
@@ -116,7 +116,7 @@ You must return STRICT JSON describing your evaluation with this exact schema:
         except json.JSONDecodeError:
             logger.error("Evaluator LLM returned malformed JSON.")
             result = {
-                "score": 7.0,
+                "score": 0.0,
                 "feedback": "Parsing failed, default score assigned"
             }
             
@@ -125,7 +125,7 @@ You must return STRICT JSON describing your evaluation with this exact schema:
     except Exception as e:
         logger.error(f"Groq Evaluator call failed: {e}")
         return {
-            "score": 7.0,
+            "score": 0.0,
             "feedback": "API execution failed, default score assigned"
         }
 

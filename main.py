@@ -132,7 +132,13 @@ def run_pipeline(portfolio_ids: list):
         checks = rule_check(summary_text, top_causal_drivers)
         r_score = compute_rule_score(checks)
         llm_score = float(final_output.get("evaluation_score", 0))
-        hybrid_score = min(10.0, llm_score + (r_score * 2))
+        rule_score = r_score * 10
+        if llm_score > 0:
+            hybrid_score = (llm_score * 0.7) + (rule_score * 0.3)
+        else:
+            hybrid_score = rule_score
+
+        print(f"[EVAL] LLM: {llm_score}, RULE: {rule_score}, FINAL: {hybrid_score}")
         final_output["evaluation_score"] = round(hybrid_score, 1)
 
         # Terminal Visualization
