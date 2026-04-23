@@ -33,3 +33,19 @@ langfuse = Langfuse(
     secret_key=secret_key,
     host=host
 )
+
+from contextlib import contextmanager
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+@contextmanager
+def timed_phase(name: str):
+    """Context manager for measuring and logging the latency of specific pipeline phases."""
+    start = time.time()
+    try:
+        yield
+    finally:
+        elapsed = round((time.time() - start) * 1000, 1)
+        logger.info(f"[PHASE] {name} completed in {elapsed}ms")
