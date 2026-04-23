@@ -1,191 +1,130 @@
-# Financial Advisor Agent - Mock Dataset
+# Autonomous Financial Reasoning Engine
 
-This directory contains comprehensive mock data for the Autonomous Financial Advisor Agent challenge.
+### Explain portfolio movement using causal AI + deterministic pipelines
 
-## Dataset Overview
+---
 
-| File | Description | Key Data Points |
-|------|-------------|-----------------|
-| `market_data.json` | Real-time market data snapshot | 40+ stocks, 5 indices, 10 sectors |
-| `news_data.json` | Financial news feed | 25 articles with sentiment, scope, and entity tags |
-| `portfolios.json` | User portfolio samples | 3 portfolios (Diversified, Sector-heavy, Conservative) |
-| `mutual_funds.json` | Mutual fund details | 12 schemes with NAV, holdings, and returns |
-| `historical_data.json` | 7-day historical trends | Index/stock history, FII/DII data, market breadth |
-| `sector_mapping.json` | Sector-stock relationships | Macro correlations and sector characteristics |
+## Overview
 
-## Data Scenarios Included
+The Autonomous Financial Reasoning Engine is a production-grade causal financial reasoning system designed to bridge the gap between raw market signals and human-readable insights. By synthesizing market data, financial news, and individual portfolio holdings, the system identifies not just *what* happened to a portfolio, but explains *why* it moved. It constructs verifiable reasoning chains that link macroeconomic triggers to sector-level impacts and granular stock performance.
 
-### Market Conditions (April 21, 2026)
+---
 
-The dataset simulates a **risk-off market day** with the following characteristics:
+## Architecture
 
-- **NIFTY 50**: -1.00% (Bearish)
-- **Bank Nifty**: -2.33% (Strong selling due to RBI stance)
-- **NIFTY IT**: +1.22% (Outperforming due to US tech earnings)
-- **FII**: Net sellers of ₹4,500 crore
-- **Market Breadth**: Weak (12 advances vs 38 declines in NIFTY 50)
+The system follows a strict multi-stage pipeline architecture to ensure data integrity and reasoning accuracy:
 
-### Sector Performance
-
-| Sector | Day Change | Sentiment | Key Driver |
-|--------|------------|-----------|------------|
-| Banking | -2.45% | Bearish | RBI hawkish stance |
-| IT | +1.35% | Bullish | US tech earnings, weak rupee |
-| Pharma | +0.78% | Bullish | USFDA approvals |
-| Metals | -1.50% | Bearish | China demand concerns |
-| Realty | -2.10% | Bearish | Interest rate sensitivity |
-| FMCG | +0.25% | Neutral | Defensive buying |
-
-### News Categories
-
-1. **Market-Wide** (5 articles)
-   - RBI monetary policy
-   - FII outflows
-   - Global risk-off sentiment
-   - Oil price movements
-
-2. **Sector-Specific** (8 articles)
-   - US tech earnings (IT positive)
-   - China steel demand (Metals negative)
-   - Housing sales vs rate concerns (Realty mixed)
-   - Government capex push (Infra positive)
-
-3. **Stock-Specific** (12 articles)
-   - HDFC Bank results (mixed)
-   - Sun Pharma USFDA approval (positive)
-   - Infosys mega deal win (positive)
-   - Tata Motors EV leadership (positive)
-
-### Edge Cases for Agent Testing
-
-The dataset includes several **conflict scenarios** to test the agent's reasoning:
-
-1. **Positive news + Negative price action**
-   - Bajaj Finance: Strong asset quality but stock falling due to sector sentiment
-   - HUL: Slightly up despite weak volume growth (defensive buying)
-
-2. **Mixed signals**
-   - Reliance: Strong retail but weak Jio subscriber growth
-   - Housing sales: Record high but rate concerns dominate
-   - ICICI Bank: Improved asset quality but margin compression
-
-3. **Sector vs Stock divergence**
-   - Tata Motors: +0.79% vs Auto sector -1.85% (EV leadership)
-
-## Portfolio Profiles
-
-### Portfolio 1: Diversified (Rahul Sharma)
-- **Type**: Well-balanced across sectors
-- **Day P&L**: -0.44% (₹-12,785)
-- **Concentration Risk**: None
-- **Max Single Stock Weight**: 7.17% (TCS)
-- **Asset Mix**: 38% Stocks, 62% Mutual Funds
-
-### Portfolio 2: Sector-Concentrated (Priya Patel)
-- **Type**: Banking & Financial Services heavy
-- **Day P&L**: -2.73% (₹-57,390)
-- **Concentration Risk**: CRITICAL (91.58% in Banking + FS)
-- **Max Single Stock Weight**: 22.62% (HDFC Bank)
-- **Asset Mix**: 91% Stocks, 9% Mutual Funds
-
-### Portfolio 3: Conservative (Arun Krishnamurthy)
-- **Type**: Mutual fund heavy with defensive stocks
-- **Day P&L**: -0.04% (₹-1,758)
-- **Concentration Risk**: None
-- **Max Single Stock Weight**: 5.19% (ITC)
-- **Asset Mix**: 21% Stocks, 79% Mutual Funds (34% Debt Funds)
-
-## Usage in Agent
-
-### Loading Data
-
-```python
-from data_loader import DataLoader
-
-# Initialize loader
-loader = DataLoader("./data")
-
-# Load all data
-market_data = loader.get_market_data()
-news = loader.get_news()
-portfolios = loader.get_portfolios()
-
-# Get specific portfolio
-portfolio = loader.get_portfolio("PORTFOLIO_002")
-
-# Get sector info
-sector = loader.get_sector_info("BANKING")
-
-# Get stock with news impact
-stock_analysis = loader.get_stock_with_context("HDFCBANK")
+```text
+Market Data + News + Portfolio Holdings
+↓
+Phase 1: Market Intelligence (Signal Extraction & Categorization)
+↓
+Phase 2: Portfolio Intelligence (Exposure Calculation & Metric Normalization)
+↓
+Phase 3: Reasoning Engine (Causal Chain Construction & Conflict Detection)
+↓
+Outcome: Structured Explanation + AI Judge Evaluation + Confidence Scoring
 ```
 
-### Expected Agent Outputs
+---
 
-For **Portfolio 2** (Banking concentrated), the agent should identify:
+## How It Works
 
-1. **Primary Impact**: RBI's hawkish stance hitting all banking holdings
-2. **Concentration Risk Alert**: 91.58% exposure to interest-rate sensitive sectors
-3. **Causal Chain**: 
-   ```
-   RBI Hawkish Stance → Banking Sector -2.45% → 
-   HDFC Bank -3.51% (largest holding) → Portfolio -2.73%
-   ```
-4. **Conflicting Signals**: 
-   - ICICI Bank asset quality improved but NIM compressed
-   - Bajaj Finance strong guidance but sector headwinds
+The engine operates on a strict causal chain model:
+**News → Sector → Stock → Portfolio**
 
-## Data Schema Reference
+* **Trigger Identification**: The system ingests financial news and identifies macroeconomic or regulatory triggers.
+* **Sector Propagation**: Mapping news impact to specific industry sectors (e.g., Banking, IT, Energy).
+* **Security Linkage**: Attributing sector-level sentiment to individual stock tickers based on correlation and exposure.
+* **Portfolio Attribution**: Aggregating security-level performance into total portfolio daily change and risk metrics.
 
-### Stock Object
-```json
-{
-  "symbol": "HDFCBANK",
-  "name": "HDFC Bank Ltd",
-  "sector": "BANKING",
-  "current_price": 1542.30,
-  "change_percent": -3.51,
-  "volume": 15234500,
-  "beta": 1.15
-}
+---
+
+## Key Features
+
+* **Deterministic Reasoning Pipeline**: Core computations and causal linking are handled via pure logic to eliminate LLM hallucinations.
+* **Sector-Level Impact Analysis**: Quantitative calculation of sector contribution to total portfolio variance.
+* **Conflict Detection**: Automated identification of diverging signals where sectoral trends and security performance disagree.
+* **Groq-Powered Explanations**: Uses Llama-3.3-70b via Groq for high-latency, low-cost narrative synthesis.
+* **Hybrid Evaluation Layer**: Combines an LLM-as-a-Judge with a deterministic rule-check layer for structural validation.
+* **Quantitative Confidence Scoring**: Multi-factor confidence calculation based on signal strength and data completeness.
+* **Observability Integration**: Full lifecycle tracing of LLM interactions using Langfuse.
+
+---
+
+## Sample Output
+
+```text
+[FINAL ADVISORY EXPLANATION]
+Portfolio declined by 2.73%. Banking holdings contributed -1.84%, primarily driven by HDFCBANK, as hawkish RBI stance pressured lending outlook. Uncertainty remains regarding the concentrated exposure to Banking and Financial Services sectors, which poses risk to portfolio stability.
+
+Top Drivers:
+* Banking holdings contributed -1.84%, primarily driven by HDFCBANK, as hawkish RBI stance pressured lending outlook.
+* Financial Services holdings contributed -0.37%, primarily driven by BAJFINANCE, as tight liquidity conditions weighed on NBFCs.
+
+Risks:
+* Concentrated exposure to Banking sector poses risk to portfolio stability.
+* Combined exposure to Banking/Finance sectors poses risk to portfolio diversification.
+
+Confidence: 0.90
+AI Judge Score: 10.0 / 10
 ```
 
-### News Object
-```json
-{
-  "id": "NEWS001",
-  "headline": "...",
-  "sentiment": "NEGATIVE",
-  "sentiment_score": -0.72,
-  "scope": "MARKET_WIDE|SECTOR_SPECIFIC|STOCK_SPECIFIC",
-  "impact_level": "HIGH|MEDIUM|LOW",
-  "entities": {
-    "sectors": ["BANKING"],
-    "stocks": ["HDFCBANK"],
-    "indices": ["BANKNIFTY"]
-  },
-  "causal_factors": ["..."]
-}
+---
+
+## How To Run
+
+1. Clone the repository and install dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
-### Portfolio Holding Object
-```json
-{
-  "symbol": "HDFCBANK",
-  "quantity": 100,
-  "avg_buy_price": 1520.00,
-  "current_price": 1542.30,
-  "weight_in_portfolio": 5.36,
-  "day_change_percent": -3.51
-}
+2. Configure your environment:
+Create a `.env` file with `GROQ_API_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`.
+
+3. Execute the pipeline for the default portfolio:
+```bash
+python3 main.py
 ```
 
-## Extending the Dataset
+4. Execute for a specific portfolio ID:
+```bash
+python3 main.py --portfolio PORTFOLIO_002
+```
 
-To add more scenarios:
+---
 
-1. **Add New Stocks**: Update `market_data.json` → `stocks` section
-2. **Add News**: Update `news_data.json` → `news` array
-3. **Add Portfolios**: Update `portfolios.json` → `portfolios` section
-4. **Add Sector**: Update `sector_mapping.json` → `sectors` section
-# AlphaTrace
+## Tech Stack
+
+* **Language**: Python 3.9+
+* **Validation**: Pydantic v2
+* **Inference**: Groq SDK (Llama 3.3 70B)
+* **Observability**: Langfuse SDK v4
+* **Environment**: python-dotenv
+
+---
+
+## Design Decisions
+
+### Hybrid System: Deterministic Reasoning + LLM Interpretation
+The most critical architectural decision was to separate **Reasoning** from **Interpretation**.
+* **Deterministic Logic** performs all financial calculations, sector mappings, and causal linking. This ensures that the grounding of every explanation is mathematically verifiable.
+* **LLM Layer** is strictly restricted to narrative synthesis and qualitative evaluation.
+By preventing the LLM from performing math or link-building, the system effectively eliminates hallucination and ensures high-reliability performance in financial contexts.
+
+---
+
+## Observability
+
+The system integrates **Langfuse** for production-grade observability. Every execution cycle is tracked with detailed traces:
+* **Trace Lifecycle**: Captures the full context from input prompts to final JSON outputs.
+* **Performance Metrics**: Monitors token usage, provider latency, and cost per execution.
+* **Debugging**: Enables granular trace-level debugging for both the generation and evaluation phases.
+
+---
+
+## Future Improvements
+
+* **Live Data Integration**: Transitioning from mock JSON to real-time NSE/BSE market APIs.
+* **Risk Engine v2**: Implementation of advanced risk metrics including Beta and liquidity stress testing.
+* **Interactive UI**: A browser-based dashboard for visualizing causal chains and historical performance.
