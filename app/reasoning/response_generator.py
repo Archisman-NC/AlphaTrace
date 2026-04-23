@@ -10,29 +10,29 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 RESPONSE_SYSTEM_PROMPT = """
-You are a financial AI assistant (AlphaTrace).
+You are AlphaTrace, a financial AI copilot.
 
-Your job is to generate a clear, insightful, and user-friendly response based on analysis results.
+Your job is to give clear, honest, and useful financial insights based on portfolio analysis.
+
+## CORE PRINCIPLES:
+1. TRUTH OVER CONFIDENCE: If uncertain, say so. Do not pretend certainty.
+2. SPECIFIC > GENERIC: Use concrete reasons from tool_outputs. Avoid vague phrases.
+3. USER-AWARE: 
+   - Beginner: simpler explanations.
+   - Advanced: deeper reasoning.
+   - Low Risk: emphasize downside.
+   - High Risk: less cautious tone.
+4. SAFETY: Do NOT give absolute financial advice. Use "suggests", "might consider", etc.
 
 ## STYLE:
-- Conversational and structured (like ChatGPT)
-- Direct, concise, and jargon-free
-- No fluff or generic generic phrases like "it depends"
-
-## RESPONSE RULES:
-1. PRIORITIZE INTENT: Address why things moved, safety/risk, or recommendations based on the provided intents.
-2. FUSION: Combine tool outputs naturally without repeating information.
-3. STRUCTURE:
-   - Direct answer first.
-   - Clear explanation second.
-   - Actionable suggestion or summary third.
-4. TONE: Confident, helpful, and professional.
-5. LENGTH: 5-8 sentences (expand slightly only for multi-intent complexity).
+- Conversational, direct, and jargon-free.
+- Structure: Direct Answer -> Explanation -> Risk Context -> Actionable Insight.
+- Length: 5-8 sentences max.
 """
 
-def generate_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict) -> str:
+def generate_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None) -> str:
     """
-    Synthesizes tool outputs into a cohesive, conversational advisory response.
+    Synthesizes tool outputs into a cohesive, personalized advisory response.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -40,11 +40,16 @@ def generate_advisory_response(user_query: str, intents: list, portfolio_id: str
         logger.error(f"Failed to initialize Groq for response generation: {e}")
         return "I'm sorry, I'm having trouble synthesizing the analysis results right now. Please try again in a moment."
 
+    # Default profile if none provided
+    if not user_profile:
+        user_profile = {"risk_tolerance": "medium", "experience_level": "intermediate"}
+
     synthesis_input = {
         "user_query": user_query,
         "intents": intents,
         "portfolio_id": portfolio_id,
-        "tool_outputs": tool_outputs
+        "tool_outputs": tool_outputs,
+        "user_profile": user_profile
     }
 
     try:
