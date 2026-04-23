@@ -46,6 +46,7 @@ def build_causal_chains(
 
         causal_chains.append({
             "news": item.get("news", "Unknown News"),
+            "news_sentiment": item.get("news_sentiment", "neutral"),
             "sector": sector,
             "sector_change": sector_change,
             "portfolio_weight": item.get("portfolio_weight", impact_data.get("portfolio_weight", 0.0)),

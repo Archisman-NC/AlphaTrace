@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 from app.ingestion.data_loader import DataLoader
 from app.analytics.market_intelligence import build_market_intelligence
 from app.analytics.portfolio_loader import load_portfolio
@@ -18,6 +19,13 @@ from app.reasoning.news_portfolio_link import link_news_to_portfolio
 from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
 from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
 from app.reasoning.causal_chain_builder import build_causal_chains
+from app.reasoning.impact_scorer import compute_impact_scores
+from app.reasoning.top_drivers import select_top_drivers
+from app.reasoning.conflict_detector import detect_conflicts
+from app.reasoning.llm_explainer import generate_llm_explanation
+
+# Load environment variables from .env if present
+load_dotenv()
 
 def main():
     print("Starting Autonomous Financial Advisor Agent - Intelligence Pipeline...\n")
@@ -120,8 +128,20 @@ def main():
         # 16. Reasoning: Causal Chain Builder (PHASE 3)
         causal_chains = build_causal_chains(personalized_news, impacts, stock_drivers)
         
-        # 17. Output Validation (Final Step)
+        # 17. Reasoning: Impact Scorer (PHASE 3)
+        scored_chains = compute_impact_scores(causal_chains)
+        
+        # 18. Reasoning: Top Drivers (PHASE 3)
+        top_causal_drivers = select_top_drivers(scored_chains, top_n=3)
+        
+        # 19. Reasoning: Conflict Detector (PHASE 3)
+        conflicts = detect_conflicts(causal_chains, normalized_holdings, trends)
+        
+        # 20. Output Validation (Final Step)
         validation = validate_outputs(exposure, top_impacts, stock_map, risks)
+        
+        # 21. Narrative Generation (Advisory Extension)
+        explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks)
         
         # Display Results
         p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
@@ -137,13 +157,41 @@ def main():
         for w in validation["warnings"]:
             print(f"   ! Warning: {w}")
 
-        print("\n[FULL CAUSAL CHAINS]")
-        if causal_chains:
-            for chain in causal_chains[:3]:
-                stocks_str = f"[{', '.join(chain['stocks'])}]" if chain['stocks'] else "[]"
-                print(f" - {chain['news'][:30]}... \u2192 {chain['sector']} \u2192 {chain['sector_change']:+.2f}% \u2192 {chain['portfolio_weight']*100:.1f}% exp \u2192 {stocks_str}")
+        print("\n[FINAL ADVISORY EXPLANATION]")
+        print(f" {explanation.get('summary', 'No summary generated.')}")
+        
+        if explanation.get("drivers"):
+            print("\n  Top Drivers:")
+            for d in explanation.get("drivers", []):
+                print(f"  - {d}")
+                
+        if explanation.get("risks"):
+            print("\n  Risks & Anomalies:")
+            for r in explanation.get("risks", []):
+                 print(f"  \u26A0\uFE0F {r}")
+
+        print("\n[TOP QUANTITATIVE DRIVERS]")
+        if top_causal_drivers:
+            for i, driver in enumerate(top_causal_drivers, 1):
+                sign = "+" if driver['impact'] > 0 else ""
+                print(f" {i}. {driver['sector']} \u2192 {sign}{driver['impact']:.2f}% \u2192 {driver['reason']}")
         else:
-            print(" - No complete causal chains constructed.")
+            print(" - No top drivers identified.")
+
+        print("\n[CONFLICTS DETECTED]")
+        if conflicts:
+            for conflict in conflicts:
+                print(f" \u26A0\uFE0F {conflict['stock']} \u2192 {conflict['reason']}")
+        else:
+            print(" - None. Signals perfectly align.")
+            
+        print("\n[CAUSAL IMPACT SCORES]")
+        if scored_chains:
+            for chain in scored_chains[:3]:
+                sign = "+" if chain['impact'] > 0 else ""
+                print(f" - {chain['sector']:<20} \u2192 {sign}{chain['impact']}% \u2190 {chain['news'][:30]}...")
+        else:
+            print(" - No causal impact scores computed.")
         
         print("\n[NEWS IMPACT BY EXPOSURE]")
         if personalized_news:
