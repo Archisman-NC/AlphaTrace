@@ -12,7 +12,7 @@ def detect_conflicts(
     Detects actionable contradictions between qualitative news sentiment 
     and quantitative market/stock performance.
     """
-    if not causal_chains or not normalized_holdings or not sector_trends:
+    if not causal_chains or not sector_trends:
         return []
 
     conflicts = []
