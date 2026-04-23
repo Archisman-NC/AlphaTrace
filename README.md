@@ -14,6 +14,7 @@ pinned: false
 ### Explain portfolio movement using causal AI + deterministic pipelines
 
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/ArchismanNC/AlphaTrace)
+[![Loom Walkthrough](https://img.shields.io/badge/Loom-Video_Walkthrough-9626ed?logo=loom)](https://www.loom.com/share/e092ee2319b744ff8110d156c3ea5307)
 
 *Note: The metadata block at the top of this file is used for automated deployment to Hugging Face Spaces.*
 
