@@ -188,19 +188,39 @@ def build_final_output(
 
 # --- Deterministic Rule-Check Layer ---
 
-KNOWN_SECTORS = ["banking", "information technology", "energy", "financial services", "fmcg"]
-KNOWN_STOCKS = ["hdfcbank", "tcs", "ntpc", "powergrid", "bajfinance", "sbin", "infy", "hdfclife"]
-CAUSAL_KEYWORDS = ["rbi", "interest", "inflation", "earnings", "demand", "liquidity", "oil", "prices", "momentum", "commodity"]
+CAUSAL_KEYWORDS = [
+    "due to", "because", "as a result", "driven by",
+    "following", "amid", "led by", "pressure", "sentiment", "impact"
+]
 
-def rule_check(summary: str) -> dict:
+def rule_check(summary: str, top_drivers: list = None) -> dict:
     """
     Deterministic validation of explanation completeness.
-    Checks whether the summary mentions a sector, stock, and causal trigger.
+    Checks whether the summary mentions the relevant sector, stock, and a causal trigger.
+    Relying ONLY on dynamic runtime data from top_drivers.
     """
+    if not summary:
+        return {"mentions_sector": False, "mentions_stock": False, "mentions_cause": False}
+
+    print("[RULE CHECK INPUT]", top_drivers)
     text = summary.lower()
     
-    mentions_sector = any(s in text for s in KNOWN_SECTORS)
-    mentions_stock = any(s in text for s in KNOWN_STOCKS)
+    mentions_sector = False
+    mentions_stock = False
+
+    if top_drivers:
+        for driver in top_drivers:
+            # Dynamic Sector detection
+            sector = driver.get("sector", "").lower()
+            if sector and sector in text:
+                mentions_sector = True
+            
+            # Dynamic Stock detection
+            for stock in driver.get("stocks", []):
+                if stock.lower() in text:
+                    mentions_stock = True
+
+    # Causal keyword detection
     mentions_cause = any(k in text for k in CAUSAL_KEYWORDS)
     
     return {

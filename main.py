@@ -159,7 +159,7 @@ def run_pipeline(portfolio_ids: list):
 
         # 23. Deterministic Rule-Check Layer
         summary_text = final_output.get("summary", "")
-        checks = rule_check(summary_text)
+        checks = rule_check(summary_text, top_causal_drivers)
         r_score = compute_rule_score(checks)
         llm_score = float(final_output.get("evaluation_score", 0))
         hybrid_score = min(10.0, llm_score + (r_score * 2))
