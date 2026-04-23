@@ -92,7 +92,7 @@ with gr.Blocks(title="AlphaTrace | Causal Intelligence") as demo:
             )
             run_btn = gr.Button("Run Reasoning Cycle", variant="primary")
         
-        gr.Separator()
+        gr.Markdown("---")
         
         output_display = gr.Markdown(
             label="Analysis Briefing",
