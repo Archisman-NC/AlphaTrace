@@ -10,24 +10,43 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 CLASSIFICATION_SYSTEM_PROMPT = """
-You are a fast intent classification engine. Return ONLY JSON. No explanation.
+You are a high-precision financial intent classification engine.
 
-## OUTPUT SCHEMA:
+Return STRICT JSON. No explanation.
+
+## INPUT:
+- user_query
+- current_portfolio
+- chat_history
+
+## OUTPUT FORMAT (STRICT):
 {
   "intent": ["full_analysis", "reason", "risk", "switch_portfolio"],
-  "portfolio_id": "string",
-  "confidence": 0.0
+  "portfolio_id": "PORTFOLIO_XXX",
+  "confidence": 0.0 
 }
+*Note: The confidence score must be a dynamic float between 0.0 and 1.0 based on query clarity.*
 
 ## RULES:
-- Detect MULTIPLE intents if present.
-- If "why" -> include "reason"
-- If safety/risk -> include "risk"
-- If switching/changing -> include "switch_portfolio"
-- Resolve "it/this" using chat_history (last 3).
-- If unclear -> use current_portfolio.
-- Confidence: 0.9 (clear), 0.7 (somewhat), <0.6 (ambig).
-- STRICT: Valid JSON only.
+1. Detect ALL relevant intents.
+2. Use chat_history to resolve references.
+3. Portfolio handling: resolve or use current_portfolio.
+4. CONFIDENCE SCORING:
+   - 0.9-1.0: extremely clear
+   - 0.7-0.89: moderate/good
+   - 0.5-0.69: ambiguous
+   - <0.5: very weak
+
+5. Edge handling:
+   - vague query → ["full_analysis"]
+   - "why" → include "reason"
+   - "safe/risk/downside" → include "risk"
+   - "switch/change" → include "switch_portfolio"
+
+## STRICT:
+- Must return valid JSON
+- No extra keys
+- No missing fields
 """
 
 def classify_intent(query: str, current_portfolio: str, chat_history: list = None) -> dict:
