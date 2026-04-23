@@ -23,6 +23,7 @@ from app.reasoning.impact_scorer import compute_impact_scores
 from app.reasoning.top_drivers import select_top_drivers
 from app.reasoning.conflict_detector import detect_conflicts
 from app.reasoning.llm_explainer import generate_llm_explanation
+from app.evaluation.llm_evaluator import evaluate_explanation, compute_confidence, build_final_output
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -143,6 +144,23 @@ def main():
         # 21. Narrative Generation (Advisory Extension)
         explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks)
         
+        # 22. Quality Evaluation & Confidence (Final Layer)
+        original_input = {
+            "portfolio_change": metrics.get("daily_change_percent", 0.0),
+            "top_drivers": top_causal_drivers,
+            "conflicts": conflicts,
+            "risks": risks
+        }
+        
+        eval_score = evaluate_explanation(explanation, original_input)
+        
+        # compute heuristics for confidence
+        align_str = sum(abs(v['impact']) for v in top_causal_drivers) if top_causal_drivers else 0
+        sig_str = abs(metrics.get('daily_change_percent', 0))
+        
+        confidence = compute_confidence(conflicts, align_str, sig_str)
+        final_output = build_final_output(explanation, eval_score, confidence)
+        
         # Display Results
         p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
         print(f"\n[PROFILE: {p_type.upper()}]")
@@ -158,17 +176,20 @@ def main():
             print(f"   ! Warning: {w}")
 
         print("\n[FINAL ADVISORY EXPLANATION]")
-        print(f" {explanation.get('summary', 'No summary generated.')}")
+        print(f" {final_output.get('summary', 'No summary generated.')}")
         
-        if explanation.get("drivers"):
+        if final_output.get("drivers"):
             print("\n  Top Drivers:")
-            for d in explanation.get("drivers", []):
+            for d in final_output.get("drivers", []):
                 print(f"  - {d}")
                 
-        if explanation.get("risks"):
+        if final_output.get("risks"):
             print("\n  Risks & Anomalies:")
-            for r in explanation.get("risks", []):
+            for r in final_output.get("risks", []):
                  print(f"  \u26A0\uFE0F {r}")
+                 
+        print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100}%")
+        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0)} / 10.0")
 
         print("\n[TOP QUANTITATIVE DRIVERS]")
         if top_causal_drivers:
