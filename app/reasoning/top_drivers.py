@@ -25,7 +25,9 @@ def select_top_drivers(
 
         try:
             raw_sector = chain.get("sector", "Unknown Sector")
-            clean_sector = "Diversified Holdings" if raw_sector == "DIVERSIFIED HOLDINGS" else raw_sector
+            clean_sector = raw_sector.replace("_", " ").title()
+            if clean_sector.upper() == "DIVERSIFIED HOLDINGS":
+                clean_sector = "Diversified Holdings"
             impact_val = float(impact)
             reason = str(chain.get("news", "Unknown Reason")).strip()
             

@@ -134,11 +134,11 @@ def main():
         
         # compute heuristics for confidence
         align_str = sum(abs(v['impact']) for v in top_causal_drivers) if top_causal_drivers else 0
+        has_mixed = len([d for d in top_causal_drivers if d['impact'] > 0]) > 0 and len([d for d in top_causal_drivers if d['impact'] < 0]) > 0
         
-        confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)))
+        confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)), signal_strength=sig_class, has_mixed_signals=has_mixed)
         final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
         
-
 
         print("\n[FINAL ADVISORY EXPLANATION]")
         print(f" {final_output.get('summary', 'No summary generated.')}")
@@ -153,17 +153,15 @@ def main():
             for r in final_output.get("risks", []):
                  print(f"  \u26A0\uFE0F {r}")
                  
-        print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100}%")
-        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0)}")
+        print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100:.1f}%")
+        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0):.1f} / 10")
         print(f"  [SIGNAL STRENGTH]   {final_output.get('signal_strength', 'unknown').upper()}")
 
 
 
     print(f"\n{'='*60}")
-    print(" PHASE 2: DATA NORMALIZATION COMPLETE")
+    print(" Analysis Complete")
     print(f"{'='*60}\n")
-    
-    print("Intelligence Pipeline Execution Successful!")
 
 if __name__ == "__main__":
     main()

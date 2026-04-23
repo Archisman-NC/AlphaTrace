@@ -20,11 +20,20 @@ def detect_concentration_risk(sector_exposure: Dict[str, float]) -> List[dict]:
         reverse=True
     )
     
+    phrase_pool = ["broadly diversified holdings", "diversified asset allocation", "cross-sector exposure"]
+    phrase_idx = 0
+    
     # Rule 1: High Risk (Any single sector > 40%)
     for sector, weight in sorted_sectors:
         if weight > 0.40:
             percentage = weight * 100
-            desc = f"CRITICAL: {percentage:.2f}% high concentration in diversified holdings" if sector == "DIVERSIFIED HOLDINGS" else f"CRITICAL: {percentage:.2f}% exposure to {sector}"
+            if sector == "DIVERSIFIED HOLDINGS":
+                term = phrase_pool[phrase_idx % len(phrase_pool)]
+                phrase_idx += 1
+                desc = f"CRITICAL: {percentage:.2f}% high concentration in {term}"
+            else:
+                desc = f"CRITICAL: {percentage:.2f}% exposure to {sector}"
+                
             risks.append({
                 "type": "sector_concentration",
                 "severity": "critical",
@@ -42,7 +51,9 @@ def detect_concentration_risk(sector_exposure: Dict[str, float]) -> List[dict]:
         if combined_weight > 0.70:
             percentage = combined_weight * 100
             if "DIVERSIFIED HOLDINGS" in [s1, s2]:
-                desc = f"MEDIUM: {percentage:.2f}% high concentration involving diversified holdings"
+                term = phrase_pool[phrase_idx % len(phrase_pool)]
+                phrase_idx += 1
+                desc = f"MEDIUM: {percentage:.2f}% high concentration involving {term}"
             else:
                 desc = f"MEDIUM: {percentage:.2f}% combined exposure to {s1} and {s2}"
                 

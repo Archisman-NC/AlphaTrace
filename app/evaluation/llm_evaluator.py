@@ -77,7 +77,9 @@ You must return STRICT JSON describing your evaluation with this exact schema:
 def compute_confidence(
     conflicts: List[dict],
     sector_alignment_strength: float,
-    portfolio_change: float
+    portfolio_change: float,
+    signal_strength: str = "moderate",
+    has_mixed_signals: bool = False
 ) -> float:
     """
     Deterministically computes a confidence score for the generated reasoning 
@@ -93,6 +95,10 @@ def compute_confidence(
     if conflicts and len(conflicts) > 0:
         base -= 0.1
         
+    # Mixed signal penalty
+    if has_mixed_signals:
+        base -= 0.05
+        
     # Strong alignment bonus
     if sector_alignment_strength > 0.5:
         base += 0.1
@@ -100,6 +106,10 @@ def compute_confidence(
     # Clamp value
     confidence = max(0.0, min(1.0, base))
     
+    # Moderate signal bounds
+    if signal_strength.lower() == "moderate":
+        confidence = min(confidence, 0.85)
+        
     return confidence
 
 def build_final_output(

@@ -36,7 +36,7 @@ def generate_llm_explanation(
     }
     
     # Ensure diversified logic renders natively inside LLM outputs without programmatic structural markers
-    clean_payload_str = json.dumps(payload, indent=2).replace("DIVERSIFIED HOLDINGS", "broad or non-sector-specific holdings").replace("Diversified Holdings", "broad or non-sector-specific holdings")
+    clean_payload_str = json.dumps(payload, indent=2).replace("DIVERSIFIED HOLDINGS", "broadly diversified holdings").replace("Diversified Holdings", "broadly diversified holdings")
 
     # Step 4: System Prompt (Strict JSON)
     system_prompt = """
@@ -46,23 +46,25 @@ Explain portfolio movement clearly and concisely based purely on the provided qu
 
 Rules for "summary":
 * EXACTLY 3 sentences. No more, no less.
-* Sentence 1: Portfolio moved X% (signal strength). Use the exact phrase "mixed sector performance" if opposing trends exist.
-* Sentence 2: Main cause (sector + exposure + stock). Always use the word "contributed" (never "drove impact").
+* Sentence 1: "Portfolio declined by X% amid sector divergence" OR "Portfolio rose by X% amid sector divergence". Use this EXACT phrasing if opposing trends exist, keeping it extremely short and sharp.
+* Sentence 2: Main cause (sector + exposure + stock). Format exactly as: "[Sector] holdings contributed X%, primarily driven by [STOCK TICKER]". Always use the word "contributed" (never "drove impact").
 * Sentence 3: Uncertainty / conflict. Emphasize concentration or diverging stock paths.
 * Use simple, sharp, professional language avoiding robotic phrasing.
+* NEVER use abbreviations. Always expand "IT" to "Information Technology".
 
 CAUSAL ATTRIBUTION RULES (CRITICAL):
 * DO NOT attach the same news to all sectors.
 * Banking impacts -> macro (RBI, rates)
-* IT impacts -> earnings/global demand
+* Information Technology impacts -> earnings/global demand
 * Energy impacts -> commodity/sector trends
 * If no strong causal link exists for a sector in the data, DO NOT force one. Let the quantitative trend speak for itself.
+* Risks must be phrased sharply like "X poses risk to Y". NEVER use weak phrasing like "may impact".
 
 You must return STRICT JSON describing your findings with this exact schema without any markdown formatting or trailing text:
 {
   "summary": "String matching the 3-sentence rules above",
-  "drivers": ["list of strings detailing each driver using the exact format 'Sector holdings contributed X%, led by Y'"],
-  "risks": ["list of strings detailing critical risks or conflicts"]
+  "drivers": ["list of strings detailing each driver using the exact format 'Sector holdings contributed X%, primarily driven by [STOCK TICKERS (e.g. HDFCBANK)]'"],
+  "risks": ["list of strings detailing critical risks or conflicts using the 'X poses risk to Y' format"]
 }
 """
 
