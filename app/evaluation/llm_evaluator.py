@@ -130,3 +130,40 @@ def build_final_output(
         "evaluation_score": evaluation.get("score", 0),
         "signal_strength": signal_strength
     }
+
+# --- Deterministic Rule-Check Layer ---
+
+KNOWN_SECTORS = ["banking", "information technology", "energy", "financial services", "fmcg"]
+KNOWN_STOCKS = ["hdfcbank", "tcs", "ntpc", "powergrid", "bajfinance", "sbin", "infy", "hdfclife"]
+CAUSAL_KEYWORDS = ["rbi", "interest", "inflation", "earnings", "demand", "liquidity", "oil", "prices", "momentum", "commodity"]
+
+def rule_check(summary: str) -> dict:
+    """
+    Deterministic validation of explanation completeness.
+    Checks whether the summary mentions a sector, stock, and causal trigger.
+    """
+    text = summary.lower()
+    
+    mentions_sector = any(s in text for s in KNOWN_SECTORS)
+    mentions_stock = any(s in text for s in KNOWN_STOCKS)
+    mentions_cause = any(k in text for k in CAUSAL_KEYWORDS)
+    
+    return {
+        "mentions_sector": mentions_sector,
+        "mentions_stock": mentions_stock,
+        "mentions_cause": mentions_cause
+    }
+
+def compute_rule_score(checks: dict) -> float:
+    """
+    Converts boolean rule checks into a 0-1 score.
+    Sector = 0.3, Stock = 0.3, Cause = 0.4.
+    """
+    score = 0.0
+    if checks.get("mentions_sector"):
+        score += 0.3
+    if checks.get("mentions_stock"):
+        score += 0.3
+    if checks.get("mentions_cause"):
+        score += 0.4
+    return score

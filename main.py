@@ -23,7 +23,7 @@ from app.reasoning.impact_scorer import compute_impact_scores
 from app.reasoning.top_drivers import select_top_drivers
 from app.reasoning.conflict_detector import detect_conflicts
 from app.reasoning.llm_explainer import generate_llm_explanation
-from app.evaluation.llm_evaluator import evaluate_explanation, compute_confidence, build_final_output
+from app.evaluation.llm_evaluator import evaluate_explanation, compute_confidence, build_final_output, rule_check, compute_rule_score
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -139,6 +139,13 @@ def main():
         confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)), signal_strength=sig_class, has_mixed_signals=has_mixed)
         final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
         
+        # 23. Deterministic Rule-Check Layer
+        summary_text = final_output.get("summary", "")
+        checks = rule_check(summary_text)
+        r_score = compute_rule_score(checks)
+        llm_score = float(final_output.get("evaluation_score", 0))
+        hybrid_score = min(10.0, llm_score + (r_score * 2))
+        final_output["evaluation_score"] = round(hybrid_score, 1)
 
         p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
         owner = raw_portfolio.get('user_name', 'Unknown')
@@ -161,6 +168,7 @@ def main():
         print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100:.1f}%")
         print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0):.1f} / 10")
         print(f"  [SIGNAL STRENGTH]   {final_output.get('signal_strength', 'unknown').upper()}")
+        print(f"  [RULE CHECK]        Sector: {'✔' if checks['mentions_sector'] else '✘'} | Stock: {'✔' if checks['mentions_stock'] else '✘'} | Cause: {'✔' if checks['mentions_cause'] else '✘'}")
 
 
 
