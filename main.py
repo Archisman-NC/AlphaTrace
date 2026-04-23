@@ -136,7 +136,7 @@ def run_pipeline(portfolio_ids: list):
             sig_class = "strong"
 
         # 21. Narrative Generation (Advisory Extension)
-        explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks)
+        explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks, portfolio_id=pid)
 
         # 22. Quality Evaluation & Confidence (Final Layer)
         original_input = {
@@ -146,7 +146,7 @@ def run_pipeline(portfolio_ids: list):
             "risks": risks
         }
 
-        eval_score = evaluate_explanation(explanation, original_input)
+        eval_score = evaluate_explanation(explanation, original_input, portfolio_id=pid)
 
         # compute heuristics for confidence
         align_str = sum(abs(v['impact']) for v in top_causal_drivers) if top_causal_drivers else 0

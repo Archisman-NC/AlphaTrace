@@ -1,3 +1,6 @@
+import os
+from langfuse import Langfuse
+
 def normalize_sector(sector: str) -> str:
     """Cleans and normalizes a sector name for strict mapping comparisons."""
     if not sector:
@@ -15,3 +18,10 @@ def build_stock_to_sector_map(sector_mapping: dict) -> dict:
             stock_map[stock] = normalize_sector(sector_name)
             
     return stock_map
+
+# Initialize Langfuse Observer (Singleton-ish)
+langfuse = Langfuse(
+    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+    host="https://cloud.langfuse.com"
+)

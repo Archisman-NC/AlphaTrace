@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from typing import Dict, List, Any
 from groq import Groq
+from app.utils.helpers import langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,8 @@ def generate_llm_explanation(
     portfolio_metrics: Dict[str, Any],
     top_drivers: List[dict],
     conflicts: List[dict],
-    risks: List[dict]
+    risks: List[dict],
+    portfolio_id: str = "UNKNOWN"
 ) -> dict:
     """
     Sends structured portfolio data to Groq LLM to generate a concise, human-readable
@@ -79,6 +82,17 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
 
     # Step 6: Groq API Call
     try:
+        # Langfuse Trace
+        trace = None
+        try:
+            trace = langfuse.trace(
+                name="llm_explanation",
+                metadata={"portfolio_id": portfolio_id, "stage": "explanation"}
+            )
+        except Exception:
+            pass
+
+        start_time = time.time()
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -88,6 +102,22 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
             temperature=0.2,
             response_format={"type": "json_object"}
         )
+        latency = time.time() - start_time
+
+        # Trace Generation
+        if trace:
+            try:
+                trace.generation(
+                    name="explanation_call",
+                    input={"system": system_prompt, "user": user_prompt},
+                    output=response.choices[0].message.content,
+                    metadata={
+                        "latency": latency,
+                        "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+                    }
+                )
+            except Exception:
+                pass
 
         # Step 7: Parse Output
         output_text = response.choices[0].message.content
@@ -109,6 +139,9 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
         # Retry once on JSON validation failure with lower temperature
         if "json_validate_failed" in error_str:
             try:
+                # Retrying should also be traced if we want to be thorough, 
+                # but following "minimal" rule I might skip or just trace the first one.
+                # Let's keep it simple.
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[

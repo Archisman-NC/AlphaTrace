@@ -1,14 +1,17 @@
 import os
 import json
 import logging
+import time
 from typing import Dict, List, Any
 from groq import Groq
+from app.utils.helpers import langfuse
 
 logger = logging.getLogger(__name__)
 
 def evaluate_explanation(
     explanation: Dict[str, Any],
-    original_input: Dict[str, Any]
+    original_input: Dict[str, Any],
+    portfolio_id: str = "UNKNOWN"
 ) -> dict:
     """
     Acts as an LLM-as-a-judge to grade the quality of the generated natural language reasoning.
@@ -44,6 +47,17 @@ You must return STRICT JSON describing your evaluation with this exact schema:
     user_prompt = f"EXPLANATION:\n{json.dumps(explanation, indent=2)}\n\nINPUT DATA:\n{json.dumps(original_input, indent=2)}"
 
     try:
+        # Langfuse Trace
+        trace = None
+        try:
+            trace = langfuse.trace(
+                name="llm_evaluation",
+                metadata={"portfolio_id": portfolio_id, "stage": "evaluation"}
+            )
+        except Exception:
+            pass
+
+        start_time = time.time()
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -53,6 +67,22 @@ You must return STRICT JSON describing your evaluation with this exact schema:
             temperature=0.1,
             response_format={"type": "json_object"}
         )
+        latency = time.time() - start_time
+
+        # Trace Generation
+        if trace:
+            try:
+                trace.generation(
+                    name="evaluation_call",
+                    input={"system": system_prompt, "user": user_prompt},
+                    output=response.choices[0].message.content,
+                    metadata={
+                        "latency": latency,
+                        "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+                    }
+                )
+            except Exception:
+                pass
 
         output_text = response.choices[0].message.content
         
