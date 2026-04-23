@@ -99,7 +99,7 @@ with gr.Blocks(title="AlphaTrace | Causal Intelligence") as demo:
             value="*Results will appear here after starting the reasoning cycle.*"
         )
         
-        gr.Separator()
+        gr.Markdown("---")
         
         with gr.Accordion("System Information", open=False):
             gr.Markdown(
