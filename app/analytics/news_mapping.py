@@ -41,7 +41,7 @@ def map_news_to_entities(loader: DataLoader, prepared_news: Dict[str, List[dict]
                 affected_sectors = all_sectors
                 
             if not affected_sectors:
-                logger.warning(f"No deterministic sectors resolved for: {item.get('headline')[:50]}")
+                logger.debug(f"No deterministic sectors resolved for: {item.get('headline')[:50]}")
                 continue
                 
             affected_stocks = []

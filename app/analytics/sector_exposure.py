@@ -49,14 +49,14 @@ def compute_sector_exposure(
         # Fetch fund details for sector breakdown
         mf_data = loader.get_mutual_fund(scheme_code)
         if not mf_data:
-            logger.warning(f"Metadata missing for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
+            logger.debug(f"Metadata missing for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
             sector_exposure["DIVERSIFIED HOLDINGS"] += fund_weight
             continue
 
         # Extract sector allocation (usually in 0-100 range in JSON)
         allocation = mf_data.get("sector_allocation", {})
         if not allocation:
-            logger.warning(f"No sector allocation found for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
+            logger.debug(f"No sector allocation found for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
             sector_exposure["DIVERSIFIED HOLDINGS"] += fund_weight
             continue
 

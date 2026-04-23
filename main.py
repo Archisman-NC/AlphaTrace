@@ -37,46 +37,15 @@ def main():
     # Capture Phase 0 / Early Phase 1 Data
     portfolios_payload = loader.portfolios.get("portfolios", {})
     fallback_id = list(portfolios_payload.keys())[0] if portfolios_payload else "TEST_PORTFOLIO"
-    one_portfolio = loader.get_portfolio(fallback_id)
-    
-    print("--- Phase 0: Data Registry Status ---")
-    print(f"Indices Cached     : {len(loader.market_data.get('indices', {}))}")
-    print(f"Sectors Mapped    : {len(set(loader.stock_to_sector.values()))}")
-    print(f"Holdings Resolved : {len(one_portfolio.get('holdings', {}).get('stocks', []))}")
-    print("--------------------------------------\n")
-    
     # Phase 1: Consolidated Market Intelligence
     market_intelligence = build_market_intelligence(loader)
-    
     sentiment = market_intelligence["market_sentiment"]
     trends = market_intelligence["sector_trends"]
     news = market_intelligence["filtered_news"]
-    
-    print("--- Unified Market Intelligence S.S.O.T ---")
-    print(f"Market Sentiment : {sentiment.get('market_sentiment', 'UNKNOWN').upper()} ({sentiment.get('avg_index_change', 0)}%)")
-    
-    # Identify Top 3 Absolute Moover Sectors
-    top_movers = sorted(
-        trends.items(), 
-        key=lambda x: abs(x[1]['change']), 
-        reverse=True
-    )[:3]
-    
-    print("\n[Top 3 Sector Trends]")
-    for name, trend in top_movers:
-        print(f" - {name}: {trend['change']}% ({trend['sentiment'].upper()})")
-    
-    print(f"\nTotal Enriched News Signals: {len(news)}")
-    print("--------------------------------------------\n")
-    
-    # --- PHASE 2: PORTFOLIO INTELLIGENCE ---
-    print("--- Phase 2: Portfolio Intelligence Dashboard ---")
+
     portfolios_to_test = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
     
     for pid in portfolios_to_test:
-        print(f"\n{'='*60}")
-        print(f" PROCESSING: {pid}")
-        print(f"{'='*60}")
         
         # 1. Load Portfolio
         raw_portfolio = load_portfolio(loader, pid)
@@ -169,19 +138,7 @@ def main():
         confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)))
         final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
         
-        # Display Results
-        p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
-        print(f"\n[PROFILE: {p_type.upper()}]")
-        print(f"Owner: {raw_portfolio.get('user_name', 'Unknown')}")
-        print(f"Total Value: \u20b9{metrics['total_value']:,.2f}")
-        print(f"Daily PnL: \u20b9{metrics['daily_pnl']:,.2f}")
-        print(f"Daily Change: {metrics['daily_change_percent']}%")
-        
-        print("\n[VALIDATION STATUS]")
-        v_icon = "✔" if validation["is_valid"] else "❌"
-        print(f" {v_icon} {validation['summary']}")
-        for w in validation["warnings"]:
-            print(f"   ! Warning: {w}")
+
 
         print("\n[FINAL ADVISORY EXPLANATION]")
         print(f" {final_output.get('summary', 'No summary generated.')}")
@@ -200,89 +157,7 @@ def main():
         print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0)}")
         print(f"  [SIGNAL STRENGTH]   {final_output.get('signal_strength', 'unknown').upper()}")
 
-        print("\n[TOP QUANTITATIVE DRIVERS]")
-        if top_causal_drivers:
-            for i, driver in enumerate(top_causal_drivers, 1):
-                sign = "+" if driver['impact'] > 0 else ""
-                print(f" {i}. {driver['sector']} \u2192 {sign}{driver['impact']:.2f}% \u2192 {driver['reason']}")
-        else:
-            print(" - No top drivers identified.")
 
-        print("\n[CONFLICTS DETECTED]")
-        if conflicts:
-            for conflict in conflicts:
-                print(f" \u26A0\uFE0F {conflict['stock']} \u2192 {conflict['reason']}")
-        else:
-            print(" - None. Signals perfectly align.")
-            
-        print("\n[CAUSAL IMPACT SCORES]")
-        if scored_chains:
-            for chain in scored_chains[:3]:
-                sign = "+" if chain['impact'] > 0 else ""
-                print(f" - {chain['sector']:<20} \u2192 {sign}{chain['impact']}% \u2190 {chain['news'][:30]}...")
-        else:
-            print(" - No causal impact scores computed.")
-        
-        print("\n[NEWS IMPACT BY EXPOSURE]")
-        if personalized_news:
-            for item in sorted(personalized_news, key=lambda x: x['portfolio_weight'], reverse=True)[:3]:
-                print(f" - {item['news'][:50]}... \u2192 {item['sector']}: {item['portfolio_weight']*100:.1f}% exposure")
-        else:
-            print(" - No portfolio-linked news events identified.")
-
-        print("\n[EVENT -> REACTION MAPPING]")
-        if enriched_news:
-            # Show first 3 for brevity
-            for item in enriched_news[:3]:
-                sign = "+" if item['sector_change'] > 0 else ""
-                print(f" - {item['news'][:50]}... \u2192 {item['sector']}: {sign}{item['sector_change']}%")
-        else:
-            print(" - No causal news events identified.")
-
-        print("\n[RELEVANT NEWS SIGNALS]")
-        if relevant_news:
-            for item in relevant_news[:3]: # Show top 3 relevant
-                sentiment_icon = "🔴" if item['sentiment'] == "negative" else "🟢"
-                print(f" {sentiment_icon} {item['headline']}")
-                print(f"    Reason: {item['relevance_reason']}")
-        else:
-            print(" - No direct news impact detected for this portfolio.")
-
-        print("\n[REASONING DRILLDOWN: KEY DRIVERS]")
-        for sector, stocks in stock_drivers.items():
-            sym_list = [s['symbol'] for s in stocks]
-            print(f" - {sector:<20}: Driven by {', '.join(sym_list)}")
-
-        print("\n[MUTUAL FUND INTERPRETATION]")
-        if mf_reasoning:
-            print(f" Mode: {mf_reasoning['mode'].upper()} | Contribution: {mf_reasoning['mf_contribution'].upper()}")
-            for detail in mf_reasoning['mf_details'][:2]: # Show first 2
-                print(f" - {detail['fund']}: {detail['note']}")
-        else:
-            print(" - No mutual funds detected.")
-
-        print("\n[TOP IMPACT SECTORS]")
-        for item in top_impacts:
-            sign = "+" if item['impact'] > 0 else ""
-            print(f" - {item['sector']:<20}: {sign}{item['impact']:.2f}%")
-
-        print("\n[SECTOR IMPACT (CONTRIBUTION TO RETURN)]")
-        # Keep the fuller impact list display below as well
-        full_impacts = sorted(impacts.items(), key=lambda x: abs(x[1]['impact']), reverse=True)[:3]
-        for sector, data in full_impacts:
-            sign = "+" if data['impact'] > 0 else ""
-            print(f" - {sector:<20}: {sign}{data['impact']:.2f}% impact ({data['portfolio_weight']*100:.1f}% weight)")
-
-        if risks:
-            print("\n[RISK WARNINGS]")
-            for r in risks:
-                print(f" ! {r['description']}")
-
-        print("\n[TOP 3 HOLDINGS (LINKED METADATA)]")
-        for item in ranked[:3]:
-            sym = item["symbol"]
-            data = stock_map[sym]
-            print(f" - {sym:<12}: Rank {data['importance_rank']} | {data['sector']} | {data['weight']*100:.2f}%")
 
     print(f"\n{'='*60}")
     print(" PHASE 2: DATA NORMALIZATION COMPLETE")

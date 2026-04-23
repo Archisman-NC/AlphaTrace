@@ -32,8 +32,6 @@ def build_causal_chains(
             continue
         if sector not in sector_impact:
             continue
-            
-        print(f"[CHECK] {item.get('news', 'Unknown')} → {sector}")
 
         impact_data = sector_impact[sector]
         s_impact = impact_data.get("impact", 0.0)
