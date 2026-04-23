@@ -123,8 +123,22 @@ The system integrates **Langfuse** for production-grade observability. Every exe
 
 ---
 
-## Future Improvements
+## Known Limitations
 
-* **Live Data Integration**: Transitioning from mock JSON to real-time NSE/BSE market APIs.
-* **Risk Engine v2**: Implementation of advanced risk metrics including Beta and liquidity stress testing.
-* **Interactive UI**: A browser-based dashboard for visualizing causal chains and historical performance.
+* **LLM Judge calibration**: The evaluation model does not use a human-labeled benchmark, so scores tend to skew high (8–10). In a production setting, this would be calibrated against expert-graded explanations to ensure scoring rigor.
+
+* **Mock data dependency**: The causal reasoning layer depends on the richness of input news. With sparse signals, the system falls back to quantitative inference, which reduces the narrative's explanatory depth.
+
+* **Static sector mapping**: Stocks not present in the reference sector mapping are ignored during normalization. Integration with a live security data API would be required for broader universe coverage.
+
+---
+
+## What I’d extend next
+
+* **Factor attribution**: Decompose portfolio movement into granular components, separating idiosyncratic stock-level performance from broad sector-level volatility.
+
+* **Advanced Risk Modeling (VaR / CVaR)**: Implement rolling risk estimation using historical simulation or parametric models to provide forward-looking volatility projections.
+
+* **Dynamic Signal Weighting**: Refine the confidence scoring model by weighting signals based on magnitude, temporal relevance, and cross-signal alignment, moving beyond the current heuristic-based thresholds.
+
+* **Real-time Market Integration**: Transition from batch ingestion from mock JSON sources to real-time streams (e.g., via ZeroMQ or WebSocket) for low-latency portfolio monitoring.
