@@ -26,8 +26,14 @@ def build_causal_chains(
             continue
 
         sector = item.get("sector")
-        if not sector or sector not in sector_impact:
+        
+        # Strict Causal Guard
+        if not sector:
             continue
+        if sector not in sector_impact:
+            continue
+            
+        print(f"[CHECK] {item.get('news', 'Unknown')} → {sector}")
 
         impact_data = sector_impact[sector]
         s_impact = impact_data.get("impact", 0.0)

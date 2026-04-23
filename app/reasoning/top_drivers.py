@@ -25,7 +25,7 @@ def select_top_drivers(
 
         try:
             raw_sector = chain.get("sector", "Unknown Sector")
-            clean_sector = "Diversified Holdings" if raw_sector == "UNCLASSIFIED" else raw_sector
+            clean_sector = "Diversified Holdings" if raw_sector == "DIVERSIFIED HOLDINGS" else raw_sector
             
             raw_stocks = chain.get("stocks", [])
             clean_stocks = raw_stocks[:2] if isinstance(raw_stocks, list) else []

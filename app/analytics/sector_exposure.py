@@ -21,7 +21,7 @@ def compute_sector_exposure(
     
     # --- STEP 1: Direct Stock Exposure ---
     for symbol, data in normalized_holdings.items():
-        sector = data.get("sector", "UNCLASSIFIED").upper()
+        sector = data.get("sector", "DIVERSIFIED HOLDINGS").upper()
         weight = data.get("weight", 0.0)
         sector_exposure[sector] += weight
 
@@ -49,15 +49,15 @@ def compute_sector_exposure(
         # Fetch fund details for sector breakdown
         mf_data = loader.get_mutual_fund(scheme_code)
         if not mf_data:
-            logger.warning(f"Metadata missing for fund {scheme_code}. Attributing to UNCLASSIFIED.")
-            sector_exposure["UNCLASSIFIED"] += fund_weight
+            logger.warning(f"Metadata missing for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
+            sector_exposure["DIVERSIFIED HOLDINGS"] += fund_weight
             continue
 
         # Extract sector allocation (usually in 0-100 range in JSON)
         allocation = mf_data.get("sector_allocation", {})
         if not allocation:
-            logger.warning(f"No sector allocation found for fund {scheme_code}. Attributing to UNCLASSIFIED.")
-            sector_exposure["UNCLASSIFIED"] += fund_weight
+            logger.warning(f"No sector allocation found for fund {scheme_code}. Attributing to DIVERSIFIED HOLDINGS.")
+            sector_exposure["DIVERSIFIED HOLDINGS"] += fund_weight
             continue
 
         # Distribute fund weight across sectors
@@ -78,7 +78,7 @@ def compute_sector_exposure(
         # Handle unallocated portion of the fund (e.g. cash or missing data)
         if total_allocated < 99.0: # Close to 100
             remainder_decimal = (100.0 - total_allocated) / 100.0
-            sector_exposure["UNCLASSIFIED"] += fund_weight * remainder_decimal
+            sector_exposure["DIVERSIFIED HOLDINGS"] += fund_weight * remainder_decimal
 
     # --- STEP 3: Final Normalization ---
     # Convert defaultdict to regular dict and ensure float types
