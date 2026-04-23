@@ -27,8 +27,9 @@ def generate_llm_explanation(
         }
 
     # Step 3: Build Structured Input
+    change_val = portfolio_metrics.get("daily_change_percent", 0.0)
     payload = {
-        "portfolio_change": portfolio_metrics.get("daily_change_percent", 0.0),
+        "portfolio_change": f"{change_val:.2f}%",
         "top_drivers": top_drivers,
         "conflicts": conflicts,
         "risks": risks
@@ -43,13 +44,12 @@ You are a hedge-fund financial analyst writing a daily note.
 
 Explain portfolio movement clearly and concisely based purely on the provided quantitative and qualitative data.
 
-Rules:
+Rules for "summary":
 * EXACTLY 3 sentences. No more, no less.
-* Sentence 1: What happened (include magnitude and signal strength). Use phrase: "mixed sector performance" instead of "opposing sector...".
-* Sentence 2: Why (sector + exposure + stocks). Format example: "IT holdings contributed +0.06, led by TCS".
-* Sentence 3: Uncertainty or conflict (if any).
-* Use simple, sharp, professional language.
-* Avoid long sentences, repetition, and filler words.
+* Sentence 1: Portfolio moved X% (signal strength). Use the exact phrase "mixed sector performance" if opposing trends exist.
+* Sentence 2: Main cause (sector + exposure + stock). Always use the word "contributed" (never "drove impact").
+* Sentence 3: Uncertainty / conflict. Emphasize concentration or diverging stock paths.
+* Use simple, sharp, professional language avoiding robotic phrasing.
 
 CAUSAL ATTRIBUTION RULES (CRITICAL):
 * DO NOT attach the same news to all sectors.
@@ -58,10 +58,10 @@ CAUSAL ATTRIBUTION RULES (CRITICAL):
 * Energy impacts -> commodity/sector trends
 * If no strong causal link exists for a sector in the data, DO NOT force one. Let the quantitative trend speak for itself.
 
-You must return STRICT JSON describing your findings with this exact schema:
+You must return STRICT JSON describing your findings with this exact schema without any markdown formatting or trailing text:
 {
-  "summary": "The main narrative explanation",
-  "drivers": ["list of strings detailing each driver using the exact format 'Sector holdings contributed X, led by Y'"],
+  "summary": "String matching the 3-sentence rules above",
+  "drivers": ["list of strings detailing each driver using the exact format 'Sector holdings contributed X%, led by Y'"],
   "risks": ["list of strings detailing critical risks or conflicts"]
 }
 """

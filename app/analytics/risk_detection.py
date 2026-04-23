@@ -23,13 +23,14 @@ def detect_concentration_risk(sector_exposure: Dict[str, float]) -> List[dict]:
     # Rule 1: High Risk (Any single sector > 40%)
     for sector, weight in sorted_sectors:
         if weight > 0.40:
-            percentage = round(weight * 100, 2)
+            percentage = weight * 100
+            desc = f"CRITICAL: {percentage:.2f}% high concentration in diversified holdings" if sector == "DIVERSIFIED HOLDINGS" else f"CRITICAL: {percentage:.2f}% exposure to {sector}"
             risks.append({
                 "type": "sector_concentration",
                 "severity": "critical",
                 "sector": sector,
                 "weight": weight,
-                "description": f"CRITICAL: {percentage}% exposure to {sector}"
+                "description": desc
             })
 
     # Rule 2: Medium Risk (Top 2 combined > 70%)
@@ -39,13 +40,18 @@ def detect_concentration_risk(sector_exposure: Dict[str, float]) -> List[dict]:
         combined_weight = w1 + w2
         
         if combined_weight > 0.70:
-            percentage = round(combined_weight * 100, 2)
+            percentage = combined_weight * 100
+            if "DIVERSIFIED HOLDINGS" in [s1, s2]:
+                desc = f"MEDIUM: {percentage:.2f}% high concentration involving diversified holdings"
+            else:
+                desc = f"MEDIUM: {percentage:.2f}% combined exposure to {s1} and {s2}"
+                
             risks.append({
                 "type": "sector_concentration",
                 "severity": "medium",
                 "sectors": [s1, s2],
                 "weight": combined_weight,
-                "description": f"MEDIUM: {percentage}% combined exposure to {s1} and {s2}"
+                "description": desc
             })
 
     return risks
