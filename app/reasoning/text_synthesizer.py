@@ -11,47 +11,64 @@ logger = logging.getLogger(__name__)
 
 SYNTHESIS_SYSTEM_PROMPT = """
 You are a financial assistant.
-Your job is to convert structured analysis into a natural, conversational response.
+Your job is to convert structured data into a natural conversational response.
 
 ## RULES:
 - Use ONLY the provided data.
-- Do NOT add new reasoning, assumptions, or external information.
-- Do NOT hallucinate.
-- Keep it concise and clear.
+- Do NOT add any new reasoning, explanations, or assumptions.
+- Do NOT infer causes beyond what is explicitly given.
+- If information is missing, ignore it.
+- Keep response concise and clear.
 - Slightly conversational tone.
-- Avoid jargon unless already present.
-- Do NOT repeat the same point.
 
 ## STRUCTURE:
-- Start with a direct answer.
-- Then briefly explain key drivers.
-- Then mention risks (if provided).
+1. Start with the summary.
+2. Then mention key drivers (if present).
+3. Then mention risks (if present).
 
-## OUTPUT:
-Return PLAIN TEXT ONLY. No markdown, no JSON, no bolding, no headers.
+## STRICT:
+- Output PLAIN TEXT ONLY.
+- No markdown.
+- No bullet points.
+- No extra commentary.
+
+if not summary:
+    return "I don't have enough data to generate a response."
 """
 
-def synthesize_text_response(analysis_data: dict) -> str:
+def synthesize_text_response(summary: str, drivers: list = None, risks: list = None) -> str:
     """
-    Converts structured reasoning results into plain-text conversational advisory.
+    Ultima-Strict text synthesis:
+    - Zero formatting (no bullet points)
+    - Zero inference
+    - Data sufficiency guardrails
     """
+    if not summary:
+        return "I don't have enough data to generate a response."
+
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
-        logger.error(f"Failed to initialize Groq for text synthesis: {e}")
+        logger.error(f"Failed to initialize Groq for Ultima-Strict synthesis: {e}")
         return "Analysis complete. Data shows movement but narrative synthesis is currently unavailable."
+
+    analysis_input = {
+        "summary": summary,
+        "drivers": drivers or [],
+        "risks": risks or []
+    }
 
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(analysis_data)}
+                {"role": "user", "content": json.dumps(analysis_input)}
             ],
-            temperature=0.0 # High precision, no creativity
+            temperature=0.0
         )
         
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Text synthesis failed: {e}")
+        logger.error(f"Ultima-Strict synthesis failed: {e}")
         return "Structural analysis completed successfully. Results are ready for review."
