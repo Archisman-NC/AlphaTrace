@@ -140,6 +140,11 @@ def main():
         final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
         
 
+        p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
+        owner = raw_portfolio.get('user_name', 'Unknown')
+        print(f"\n{'─'*60}")
+        print(f" 📊 {pid} | {owner} | {p_type.title()}")
+        print(f"{'─'*60}")
         print("\n[FINAL ADVISORY EXPLANATION]")
         print(f" {final_output.get('summary', 'No summary generated.')}")
         

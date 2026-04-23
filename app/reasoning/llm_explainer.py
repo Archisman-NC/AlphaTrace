@@ -27,9 +27,11 @@ def generate_llm_explanation(
         }
 
     # Step 3: Build Structured Input
-    change_val = portfolio_metrics.get("daily_change_percent", 0.0)
+    change_val = float(portfolio_metrics.get("daily_change_percent", 0.0))
+    direction = "declined" if change_val < 0 else "rose"
+    abs_change = abs(change_val)
     payload = {
-        "portfolio_change": f"{change_val:.2f}%",
+        "portfolio_change": f"{direction} by {abs_change:.2f}%",
         "top_drivers": top_drivers,
         "conflicts": conflicts,
         "risks": risks
@@ -46,25 +48,29 @@ Explain portfolio movement clearly and concisely based purely on the provided qu
 
 Rules for "summary":
 * EXACTLY 3 sentences. No more, no less.
-* Sentence 1: "Portfolio declined by X% amid sector divergence" OR "Portfolio rose by X% amid sector divergence". Use this EXACT phrasing if opposing trends exist, keeping it extremely short and sharp.
-* Sentence 2: Main cause (sector + exposure + stock). Format exactly as: "[Sector] holdings contributed X%, primarily driven by [STOCK TICKER]". Always use the word "contributed" (never "drove impact").
-* Sentence 3: Uncertainty / conflict. Emphasize concentration or diverging stock paths.
-* Use simple, sharp, professional language avoiding robotic phrasing.
-* NEVER use abbreviations. Always expand "IT" to "Information Technology".
+* Sentence 1: Use portfolio_change from the data verbatim (e.g. "Portfolio declined by 0.44% amid sector divergence."). Keep it extremely short.
+* Sentence 2: Main cause (sector + stock + ONE causal trigger). Format: "[Sector] holdings contributed X%, primarily driven by [TICKER], as [short causal clause]." Always use "contributed" (never "drove impact").
+* Sentence 3: ONLY express uncertainty or conflict. Start with "Uncertainty remains..." or similar. Emphasize concentration risk or diverging stock paths. Do NOT repeat the cause from Sentence 2.
+* Use simple, sharp, professional language.
+* NEVER use abbreviations. Always write "Information Technology" (not "IT").
+* NEVER use apostrophes (write "RBI hawkish stance" not "RBI's hawkish stance").
+* Ensure subject-verb agreement ("paths pose risk" not "paths poses risk").
 
 CAUSAL ATTRIBUTION RULES (CRITICAL):
-* DO NOT attach the same news to all sectors.
-* Banking impacts -> macro (RBI, rates)
-* Information Technology impacts -> earnings/global demand
-* Energy impacts -> commodity/sector trends
-* If no strong causal link exists for a sector in the data, DO NOT force one. Let the quantitative trend speak for itself.
-* Risks must be phrased sharply like "X poses risk to Y". NEVER use weak phrasing like "may impact".
+* Each sector MUST have a UNIQUE causal phrase. NEVER repeat the same cause across two drivers.
+* Banking → "as hawkish RBI stance pressured lending outlook"
+* Financial Services → "as tight liquidity conditions weighed on NBFCs"
+* Information Technology → "as positive earnings momentum supported the sector"
+* Energy → "as weakness in energy prices pressured the sector"
+* DO NOT reference specific event names (e.g. "US Tech Giants report Q1 earnings"). Use generic causal language only.
+* If no strong causal link exists, let the quantitative trend speak for itself.
+* Risks must use sharp phrasing: "X poses risk to Y". NEVER use "may impact".
 
-You must return STRICT JSON describing your findings with this exact schema without any markdown formatting or trailing text:
+You must return STRICT JSON with this exact schema. No markdown, no trailing text:
 {
-  "summary": "String matching the 3-sentence rules above",
-  "drivers": ["list of strings detailing each driver using the exact format 'Sector holdings contributed X%, primarily driven by [STOCK TICKERS (e.g. HDFCBANK)]'"],
-  "risks": ["list of strings detailing critical risks or conflicts using the 'X poses risk to Y' format"]
+  "summary": "3-sentence string matching the rules above",
+  "drivers": ["Sector holdings contributed X%, primarily driven by TICKER, as [unique causal clause]"],
+  "risks": ["X poses risk to Y"]
 }
 """
 
@@ -99,6 +105,24 @@ You must return STRICT JSON describing your findings with this exact schema with
         return result
         
     except Exception as e:
+        error_str = str(e)
+        # Retry once on JSON validation failure with lower temperature
+        if "json_validate_failed" in error_str:
+            try:
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.1,
+                    response_format={"type": "json_object"}
+                )
+                result = json.loads(response.choices[0].message.content)
+                return result
+            except Exception:
+                pass
+        
         logger.error(f"Groq API call failed: {e}")
         return {
             "summary": "Error communicating with AI reasoning engine.",
