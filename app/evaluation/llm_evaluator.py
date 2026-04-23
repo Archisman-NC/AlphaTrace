@@ -138,30 +138,24 @@ def compute_confidence(
 ) -> float:
     """
     Deterministically computes a confidence score for the generated reasoning 
-    using entirely quantitative pipeline metrics, averting LLM hallucination.
+    using entirely quantitative pipeline metrics.
     """
     base = 0.8
     
-    # Weak signal penalty
     if abs(portfolio_change) < 0.1:
         base -= 0.15
         
-    # Conflict penalty
     if conflicts and len(conflicts) > 0:
         base -= 0.1
         
-    # Mixed signal penalty
     if has_mixed_signals:
         base -= 0.05
         
-    # Strong alignment bonus
     if sector_alignment_strength > 0.5:
         base += 0.1
         
-    # Clamp value
     confidence = max(0.0, min(1.0, base))
     
-    # Moderate signal bounds
     if signal_strength.lower() == "moderate":
         confidence = min(confidence, 0.85)
         

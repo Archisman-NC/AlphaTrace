@@ -16,10 +16,9 @@ logger = logging.getLogger(__name__)
 def build_market_intelligence(loader: DataLoader) -> dict:
     """
     Orchestrates the Phase 1 intelligence pipeline to produce a 
-    unified Market Intelligence object (Single Source of Truth).
+    unified Market Intelligence object.
     """
     try:
-        # Step 2: Execution Pipeline (Strict Order)
         market_sentiment = compute_market_sentiment(loader)
         sector_trends = compute_sector_trends(loader)
         filtered_news_raw = prepare_news(loader)
@@ -27,7 +26,6 @@ def build_market_intelligence(loader: DataLoader) -> dict:
         news_with_impact = assign_directional_impact(mapped_news)
         sector_news_map = aggregate_sector_news(news_with_impact)
 
-        # Step 3: Final Object Structure
         return {
             "market_sentiment": market_sentiment,
             "sector_trends": sector_trends,
@@ -36,7 +34,6 @@ def build_market_intelligence(loader: DataLoader) -> dict:
         }
         
     except Exception as e:
-        # Step 4: Edge Case Handling
         logger.error(f"Error building market intelligence: {e}")
         return {
             "market_sentiment": {},

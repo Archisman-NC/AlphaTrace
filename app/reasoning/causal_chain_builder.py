@@ -18,19 +18,12 @@ def build_causal_chains(
     causal_chains = []
 
     for item in enriched_news:
-        # We assume enriched_news passed here already contains portfolio_exposed flags 
-        # (and possibly portfolio_weight from exposure enrichment)
-        # Note: personalized_news from main.py is typically passed here.
         if item.get("portfolio_exposed", False) is False and item.get("portfolio_weight", 0.0) <= 0:
-            # We strictly want exposed sectors. If portfolio_weight > 0, it is exposed.
             continue
 
         sector = item.get("sector")
         
-        # Strict Causal Guard
-        if not sector:
-            continue
-        if sector not in sector_impact:
+        if not sector or sector not in sector_impact:
             continue
 
         impact_data = sector_impact[sector]
@@ -44,7 +37,6 @@ def build_causal_chains(
         else:
             impact_direction = "neutral"
 
-        # Fetch top stock drivers
         stocks_info = stock_drilldown.get(sector, [])
         stock_symbols = [s["symbol"] for s in stocks_info]
 
@@ -59,7 +51,6 @@ def build_causal_chains(
             "sector_impact": s_impact
         })
 
-    # Sort causal chains by absolute sector impact descending
     causal_chains.sort(key=lambda x: abs(x["sector_impact"]), reverse=True)
 
     return causal_chains

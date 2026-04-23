@@ -29,7 +29,7 @@ def generate_llm_explanation(
             "risks": risks
         }
 
-    # Step 3: Build Structured Input
+    # Build Structured Input
     change_val = float(portfolio_metrics.get("daily_change_percent", 0.0))
     direction = "declined" if change_val < 0 else "rose"
     abs_change = abs(change_val)
@@ -43,7 +43,7 @@ def generate_llm_explanation(
     # Ensure diversified logic renders natively inside LLM outputs without programmatic structural markers
     clean_payload_str = json.dumps(payload, indent=2).replace("DIVERSIFIED HOLDINGS", "broadly diversified holdings").replace("Diversified Holdings", "broadly diversified holdings")
 
-    # Step 4: System Prompt (Strict JSON)
+    # System Prompt (Strict JSON)
     system_prompt = """
 You are a hedge-fund financial analyst writing a daily note.
 
@@ -77,12 +77,9 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
 }
 """
 
-    # Step 5: User Input
     user_prompt = f"DATA:\n{clean_payload_str}"
 
-    # Step 6: Groq API Call
     try:
-        # Langfuse Tracing (Universal Compatibility v2/v4)
         trace = None
         generation = None
         try:
@@ -92,7 +89,6 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
                     metadata={"portfolio_id": portfolio_id, "stage": "explanation"}
                 )
             elif hasattr(langfuse, "start_as_current_generation"):
-                # For v4, we'll use a single generation object as the trace to keep it clean
                 generation = langfuse.start_as_current_generation(
                     name="llm_explanation",
                     input={"system": system_prompt, "user": user_prompt},
@@ -115,7 +111,6 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
         latency = time.time() - start_time
         output_text = response.choices[0].message.content
 
-        # Update trace/generation
         try:
             if trace:
                 trace.generation(
@@ -146,7 +141,6 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
         except Exception as e:
             print("Langfuse update error:", e)
 
-        # Step 7: Parse Output
         try:
             result = json.loads(output_text)
         except json.JSONDecodeError:
@@ -161,7 +155,6 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
         
     except Exception as e:
         error_str = str(e)
-        # Retry once on JSON validation failure with lower temperature
         if "json_validate_failed" in error_str:
             try:
                 # Retrying should also be traced if we want to be thorough, 
