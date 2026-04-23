@@ -10,53 +10,24 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 CLASSIFICATION_SYSTEM_PROMPT = """
-You are a high-precision intent classification engine for a financial AI system (AlphaTrace).
+You are a fast intent classification engine. Return ONLY JSON. No explanation.
 
-Your task is to classify user intent from a query, using context.
-
-You MUST return STRICT JSON only. No explanation. No extra text.
-
----
-
-## VALID INTENTS:
-
-- "full_analysis"
-- "reason"
-- "risk"
-- "switch_portfolio"
-
----
+## OUTPUT SCHEMA:
+{
+  "intent": ["full_analysis", "reason", "risk", "switch_portfolio"],
+  "portfolio_id": "string",
+  "confidence": 0.0
+}
 
 ## RULES:
-
-1. MULTI-INTENT:
-- If query contains multiple intents → return multiple intents as array
-- Example: "why did it fall and should I switch?" → ["reason", "switch_portfolio"]
-
-2. CONTEXT RESOLUTION:
-- Use chat_history to resolve "it", "this", "that"
-- If unclear → assume current_portfolio
-
-3. PORTFOLIO RESOLUTION:
-- If user explicitly mentions a portfolio → use it
-- Else → use current_portfolio
-- NEVER invent new portfolio IDs
-
-4. CONFIDENCE SCORING:
-- 0.9–1.0 → very clear intent
-- 0.7–0.89 → reasonably clear
-- 0.5–0.69 → ambiguous
-- <0.5 → very unclear
-
-5. EDGE CASES:
-- If query is vague → default to ["full_analysis"]
-- If user asks “why” → include "reason"
-- If user asks about safety, downside → include "risk"
-- If user mentions switching → include "switch_portfolio"
-
-6. STRICTNESS:
-- Output MUST be valid JSON
-- No markdown, no explanation, no trailing text
+- Detect MULTIPLE intents if present.
+- If "why" -> include "reason"
+- If safety/risk -> include "risk"
+- If switching/changing -> include "switch_portfolio"
+- Resolve "it/this" using chat_history (last 3).
+- If unclear -> use current_portfolio.
+- Confidence: 0.9 (clear), 0.7 (somewhat), <0.6 (ambig).
+- STRICT: Valid JSON only.
 """
 
 def classify_intent(query: str, current_portfolio: str, chat_history: list = None) -> dict:
