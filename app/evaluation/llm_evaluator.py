@@ -47,15 +47,25 @@ You must return STRICT JSON describing your evaluation with this exact schema:
     user_prompt = f"EXPLANATION:\n{json.dumps(explanation, indent=2)}\n\nINPUT DATA:\n{json.dumps(original_input, indent=2)}"
 
     try:
-        # Langfuse Trace
+        # Langfuse Tracing (Universal Compatibility v2/v4)
         trace = None
+        generation = None
         try:
-            trace = langfuse.trace(
-                name="llm_evaluation",
-                metadata={"portfolio_id": portfolio_id, "stage": "evaluation"}
-            )
-        except Exception:
-            pass
+            if hasattr(langfuse, "trace"):
+                trace = langfuse.trace(
+                    name="llm_evaluation",
+                    metadata={"portfolio_id": portfolio_id, "stage": "evaluation"}
+                )
+            elif hasattr(langfuse, "start_as_current_generation"):
+                # For v4, we'll use a single generation object as the trace to keep it clean
+                generation = langfuse.start_as_current_generation(
+                    name="llm_evaluation",
+                    input={"system": system_prompt, "user": user_prompt},
+                    model="llama-3.3-70b-versatile",
+                    metadata={"portfolio_id": portfolio_id, "stage": "evaluation"}
+                )
+        except Exception as e:
+            print(f"Langfuse init error: {e}")
 
         start_time = time.time()
         response = client.chat.completions.create(
@@ -68,24 +78,39 @@ You must return STRICT JSON describing your evaluation with this exact schema:
             response_format={"type": "json_object"}
         )
         latency = time.time() - start_time
-
-        # Trace Generation
-        if trace:
-            try:
+        output_text = response.choices[0].message.content
+        
+        # Update trace/generation
+        try:
+            if trace:
                 trace.generation(
                     name="evaluation_call",
                     input={"system": system_prompt, "user": user_prompt},
-                    output=response.choices[0].message.content,
-                    metadata={
-                        "latency": latency,
-                        "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+                    output=output_text,
+                    model="llama-3.3-70b-versatile",
+                    usage={
+                        "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                        "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                        "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                    },
+                    metadata={"latency": latency}
+                )
+                langfuse.flush()
+                print(f"[LANGFUSE] Evaluation Trace URL: {trace.get_trace_url()}")
+            elif generation:
+                generation.update(
+                    output=output_text,
+                    usage_details={
+                        "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                        "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                        "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
                     }
                 )
-            except Exception:
-                pass
+                generation.end()
+                langfuse.flush()
+        except Exception as e:
+            print("Langfuse update error:", e)
 
-        output_text = response.choices[0].message.content
-        
         try:
             result = json.loads(output_text)
         except json.JSONDecodeError:

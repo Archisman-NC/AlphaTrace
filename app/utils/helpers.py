@@ -24,8 +24,12 @@ def build_stock_to_sector_map(sector_mapping: dict) -> dict:
     return stock_map
 
 # Initialize Langfuse Observer (Singleton-ish)
+public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('\"\'')
+secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip('\"\'')
+host = os.getenv("LANGFUSE_BASE_URL", os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")).strip('\"\'')
+
 langfuse = Langfuse(
-    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-    host=os.getenv("LANGFUSE_BASE_URL", os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
+    public_key=public_key,
+    secret_key=secret_key,
+    host=host
 )

@@ -1,12 +1,12 @@
 import os
+import json
+import argparse
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables at the absolute entry point
 load_dotenv()
 
-import json
-import argparse
-from datetime import datetime
 from app.ingestion.data_loader import DataLoader
 from app.analytics.market_intelligence import build_market_intelligence
 from app.analytics.portfolio_loader import load_portfolio
@@ -31,9 +31,7 @@ from app.reasoning.top_drivers import select_top_drivers
 from app.reasoning.conflict_detector import detect_conflicts
 from app.reasoning.llm_explainer import generate_llm_explanation
 from app.evaluation.llm_evaluator import evaluate_explanation, compute_confidence, build_final_output, rule_check, compute_rule_score
-
-# Load environment variables from .env if present
-load_dotenv()
+from app.utils.helpers import langfuse
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "pipeline.jsonl")
@@ -205,7 +203,6 @@ def run_pipeline(portfolio_ids: list):
         }
         write_log(log_entry)
 
-
     print(f"\n{'='*60}")
     print(" Analysis Complete")
     print(f"{'='*60}\n")
@@ -226,3 +223,9 @@ if __name__ == "__main__":
         run_pipeline(["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"])
     else:
         run_pipeline([args.portfolio])
+
+    # Ensure Langfuse traces are flushed before exit
+    try:
+        langfuse.flush()
+    except:
+        pass

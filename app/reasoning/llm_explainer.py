@@ -82,15 +82,25 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
 
     # Step 6: Groq API Call
     try:
-        # Langfuse Trace
+        # Langfuse Tracing (Universal Compatibility v2/v4)
         trace = None
+        generation = None
         try:
-            trace = langfuse.trace(
-                name="llm_explanation",
-                metadata={"portfolio_id": portfolio_id, "stage": "explanation"}
-            )
-        except Exception:
-            pass
+            if hasattr(langfuse, "trace"):
+                trace = langfuse.trace(
+                    name="llm_explanation",
+                    metadata={"portfolio_id": portfolio_id, "stage": "explanation"}
+                )
+            elif hasattr(langfuse, "start_as_current_generation"):
+                # For v4, we'll use a single generation object as the trace to keep it clean
+                generation = langfuse.start_as_current_generation(
+                    name="llm_explanation",
+                    input={"system": system_prompt, "user": user_prompt},
+                    model="llama-3.3-70b-versatile",
+                    metadata={"portfolio_id": portfolio_id, "stage": "explanation"}
+                )
+        except Exception as e:
+            print(f"Langfuse init error: {e}")
 
         start_time = time.time()
         response = client.chat.completions.create(
@@ -103,25 +113,40 @@ You must return STRICT JSON with this exact schema. No markdown, no trailing tex
             response_format={"type": "json_object"}
         )
         latency = time.time() - start_time
+        output_text = response.choices[0].message.content
 
-        # Trace Generation
-        if trace:
-            try:
+        # Update trace/generation
+        try:
+            if trace:
                 trace.generation(
                     name="explanation_call",
                     input={"system": system_prompt, "user": user_prompt},
-                    output=response.choices[0].message.content,
-                    metadata={
-                        "latency": latency,
-                        "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+                    output=output_text,
+                    model="llama-3.3-70b-versatile",
+                    usage={
+                        "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                        "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                        "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                    },
+                    metadata={"latency": latency}
+                )
+                langfuse.flush()
+                print(f"[LANGFUSE] Explanation Trace URL: {trace.get_trace_url()}")
+            elif generation:
+                generation.update(
+                    output=output_text,
+                    usage_details={
+                        "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                        "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                        "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
                     }
                 )
-            except Exception:
-                pass
+                generation.end()
+                langfuse.flush()
+        except Exception as e:
+            print("Langfuse update error:", e)
 
         # Step 7: Parse Output
-        output_text = response.choices[0].message.content
-        
         try:
             result = json.loads(output_text)
         except json.JSONDecodeError:
