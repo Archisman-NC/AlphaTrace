@@ -15,102 +15,98 @@ logger = logging.getLogger(__name__)
 
 RESPONSE_SYSTEM_PROMPT = """
 You are AlphaTrace, a financial AI copilot.
-Goal: Provide clear, honest, and causal insights.
 
 ## CORE PRINCIPLES:
 1. TRUTH OVER CONFIDENCE: If uncertain, say so.
 2. SPECIFIC > GENERIC: Mention tickers (HDFCBANK, TCS, etc) and specific triggers.
 3. DATA-DRIVEN: Use tool_outputs (%, changes).
-4. MEMORY-PRIORITY: Building on memory_context (past drivers).
+4. MEMORY-PRIORITY: Link to past drivers discussed in memory_context.
 
 ## STYLE:
 - Direct Answer -> Causal Explanation -> Actionable Insight.
 - Length: 5-8 sentences.
 """
 
-def generate_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None, memory_context: dict = None) -> str:
+def _generate_base_response(client: Groq, prompt: str, system_msg: str) -> str:
+    """Internal helper for raw generation."""
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7,
+        max_tokens=800
+    )
+    return response.choices[0].message.content.strip()
+
+def generate_validated_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> str:
     """
-    Synthesizes narrative with automated self-correction if quality is low.
+    CENTRAL WRAPER: Generates -> Evaluates -> Self-Corrects in a single production gated loop.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
         logger.error(f"Groq Init Failed: {e}")
-        return "Synthesis engine offline."
+        return "Synthesis engine is currently offline."
 
-    # 1. INITIAL GENERATION
     synthesis_input = {
         "user_query": user_query,
-        "portfolio_id": portfolio_id,
         "tool_outputs": tool_outputs,
         "memory_context": memory_context or {}
     }
-    
-    system_msg = RESPONSE_SYSTEM_PROMPT
     user_msg = json.dumps(synthesis_input)
 
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
-            temperature=0.7,
-            max_tokens=600
-        )
-        draft = response.choices[0].message.content.strip()
+    # 1. INITIAL GENERATION (Draft)
+    draft = _generate_base_response(client, user_msg, RESPONSE_SYSTEM_PROMPT)
 
-        # 2. EVALUATION & SELF-CORRECTION
-        eval_result = evaluate_explanation(draft, synthesis_input, portfolio_id)
-        score = eval_result.get("score", 0.0)
+    # 2. EVALUATION
+    # Pass draft to strict Llama judge
+    eval_result = evaluate_explanation(draft, synthesis_input, portfolio_id)
+    score = eval_result.get("score", 0.0)
+    
+    logger.info(f"[AUDITOR] Draft Score: {score}")
+
+    # 3. SELF-CORRECTION (One Retry)
+    if score < 6.5: # Strict threshold for AlphaTrace
+        logger.info("TRIGGERING SELF-CORRECTION: Quality threshold breach.")
         
-        logger.info(f"[EVALUATOR] Draft Score: {score}")
-
-        if score < 6.0:
-            logger.info("Triggering Self-Correction: Reasoning quality below threshold.")
-            correction_instruction = f"""
-            IMPROVE THIS RESPONSE. It was scored low ({score}) by an internal judge.
-            FIX: {eval_result.get('reason', 'Generic reasoning detected.')}
-            REQUIREMENT: Be more specific. Mention tickers from tool_outputs. Include percentage changes.
-            Link specifically to the trigger.
-            PREVIOUS DRAFT: {draft}
-            """
-            
-            corrected_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": correction_instruction}
-                ],
-                temperature=0.4 # More deterministic for correction
-            )
-            final_response = corrected_response.choices[0].message.content.strip()
-            logger.info(f"[SELF-CORRECTION] Complete. Final quality improved.")
-            return final_response
-            
-        return draft
-    except Exception as e:
-        logger.error(f"Generation failed: {e}")
-        return "I encountered an error during temporal synthesis."
-
-def stream_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None, memory_context: dict = None) -> Generator[str, None, None]:
-    """
-    Streaming version (Note: Self-correction is disabled for streaming to preserve low latency).
-    """
-    try:
-        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        synthesis_input = {"user_query": user_query, "tool_outputs": tool_outputs, "memory_context": memory_context or {}}
+        correction_prompt = f"""
+        IMPROVE THIS ADVISORY. It was scored low ({score}/10) by our internal auditor.
+        REASON: {eval_result.get('reason', 'Too generic or missing tickers.')}
         
-        stream = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": RESPONSE_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(synthesis_input)}
-            ],
-            temperature=0.7,
-            stream=True
-        )
-        for chunk in stream:
-            token = chunk.choices[0].delta.content
-            if token: yield token
-    except Exception as e:
-        logger.error(f"Streaming failed: {e}")
-        yield "Briefing aborted due to connection error."
+        REQUIRED IMPROVEMENTS:
+        - Mention specific tickers from tool_outputs (e.g. HDFCBANK, TCS).
+        - Include percentage performance changes.
+        - Link directly to the causal news trigger.
+        
+        PREVIOUS DRAFT: {draft}
+        """
+        
+        final_text = _generate_base_response(client, correction_prompt, RESPONSE_SYSTEM_PROMPT)
+        logger.info("[AUDITOR] Self-Correction Complete. Final response gated.")
+        return final_text
+
+    return draft
+
+def stream_final_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> Generator[str, None, None]:
+    """
+    STREAMING COMPATIBILITY LAYER:
+    Generates validated response FIRST, then pipes tokens to UI at a natural cadence.
+    Ensures that "Typing UX" does NOT bypass the "Reasoning Evaluator".
+    """
+    # Generate full validated text behind the scenes
+    final_text = generate_validated_response(
+        user_query=user_query,
+        intents=intents,
+        portfolio_id=portfolio_id,
+        tool_outputs=tool_outputs,
+        memory_context=memory_context
+    )
+
+    # Break into tokens and yield for Streamlit st.write_stream
+    # We use a tiny sleep to simulate professional typing flow
+    words = final_text.split(" ")
+    for i, word in enumerate(words):
+        yield word + " "
+        time.sleep(0.01) # Professional cadence (approx 100-150 wpm UI feel)
