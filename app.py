@@ -61,13 +61,18 @@ def get_portfolio_context(pid):
     except Exception:
         return {"risk_tolerance": "medium", "experience_level": "intermediate", "name": "User"}
 
+def interpret_conf(c):
+    if c > 0.8: return "High"
+    if c > 0.6: return "Moderate"
+    return "Low"
+
 # --- Sidebar: Portfolio Intelligence Panel ---
 with st.sidebar:
     st.title("📊 AlphaTrace Hub")
     
     # Portfolio Control
     selected_label = st.selectbox(
-        "Active Context", 
+        "Context Portfolio", 
         options=list(PORTFOLIO_MAPPING.keys()),
         index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0
     )
@@ -88,36 +93,47 @@ with st.sidebar:
         data = st.session_state.last_tool_data
         full_analysis = data.get("full_analysis", {})
         
-        # 1. Confidence Indicator
-        conf = data.get("metrics", {}).get("confidence", 0.85)
-        st.metric("Reasoning Confidence", f"{conf*100:.1f}%")
+        # 1. Confidence Indicator with Interpretation
+        conf = data.get("metrics", {}).get("confidence", 0.0)
+        st.metric("Reasoning Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
         st.progress(conf)
         
+        st.divider()
+
         # 2. Sector Exposure (Donut Chart)
         exposure = full_analysis.get("sector_exposure", {})
         if exposure:
+            st.caption("Sector exposure of your portfolio")
+            top_sector = max(exposure, key=exposure.get)
+            st.write(f"**Top Exposure:** {top_sector}")
+            
             df_exposure = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
             fig = px.pie(df_exposure, values="Allocation", names="Sector", hole=0.4, 
                          color_discrete_sequence=px.colors.qualitative.Pastel)
             fig.update_layout(margin=dict(l=0, r=0, t=10, b=10), showlegend=False, height=200)
             st.plotly_chart(fig, use_container_width=True)
         
-        # 3. Holdings Table (Styled)
+        st.divider()
+
+        # 3. Holdings Table (Sorted & Styled)
         holdings = full_analysis.get("ranked_holdings", [])
         if holdings:
+            st.markdown("**Top Holdings (by Allocation)**")
             df_holdings = pd.DataFrame(holdings)
+            df_holdings = df_holdings.sort_values("allocation", ascending=False)
             
             def color_change(val):
                 if val > 0: return "color: #00ff00"
                 if val < 0: return "color: #ff4b4b"
                 return "color: grey"
 
-            st.markdown("**Top Holdings**")
             st.dataframe(
                 df_holdings[["ticker", "allocation", "daily_change"]].style.applymap(color_change, subset=["daily_change"]),
                 hide_index=True,
                 use_container_width=True
             )
+    else:
+        st.info("No current portfolio data available. Ask a question to start analysis.")
 
     # Passive Memory Indicators
     if st.session_state.memory:
@@ -135,7 +151,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- Chat Input & Pipeline ---
+# --- Reasoning Cycle ---
 if prompt := st.chat_input("Analyze my portfolio..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -201,8 +217,8 @@ if prompt := st.chat_input("Analyze my portfolio..."):
                 memory_turn = normalize_memory_turn(st.session_state.current_portfolio, prompt, validation["validated_intent"], final_briefing, tool_data)
                 st.session_state.memory.append(memory_turn)
                 st.session_state.messages.append({"role": "assistant", "content": final_briefing})
-                st.rerun() # Refresh sidebar metrics
+                st.rerun()
 
         except Exception as e:
             logger.error(f"UI Error: {e}")
-            st.error("Engine Synch Issue. Retrying...")
+            st.error("Engine Synch Issue.")
