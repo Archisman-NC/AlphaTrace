@@ -6,3 +6,5 @@ pytest
 gradio
 streamlit
 openai
+pandas
+plotly
