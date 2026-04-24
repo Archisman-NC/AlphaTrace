@@ -1,82 +1,115 @@
 import logging
+import random
+from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-def detect_proactive_signals(tool_data: dict, user_query: str) -> dict:
+PREFIXES = [
+    "Also worth noting —",
+    "One thing to watch —",
+    "Quick heads-up —",
+    "Another pulse signal —",
+    "From your recent data —"
+]
+
+def generate_proactive_insight(tool_data: dict, user_query: str, session_memory: list = None, last_topic: str = None) -> Optional[dict]:
     """
-    Scans analytical data for high-value proactive triggers.
+    Advanced Proactive Engine:
+    - Weighted Prioritization
+    - Severity Dynamics
+    - Memory Bridging
+    - Anti-Template Generation
     """
-    triggers = []
     full_analysis = tool_data.get("full_analysis", {})
     reason_results = tool_data.get("reason", {})
     risk_results = tool_data.get("risk", {})
+    
+    potential_triggers = []
 
-    # 1. Concentration Risk (>40%)
+    # 1. Concentration Check (Weight 3)
     exposure = full_analysis.get("sector_exposure", {})
     for sector, alloc in exposure.items():
         if alloc > 40:
-            triggers.append({
+            severity = "high" if alloc > 50 else "medium"
+            potential_triggers.append({
                 "type": "concentration",
-                "sector": sector,
-                "value": alloc,
-                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%). This increases sector-specific downside risk."
+                "weight": 3,
+                "severity": severity,
+                "topic": f"concentration_{sector}",
+                "data": {"sector": sector, "alloc": alloc},
+                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%)."
             })
 
-    # 2. Holding Divergence (>2% from sector)
+    # 2. Divergence Check (Weight 2)
     holdings = full_analysis.get("ranked_holdings", [])
-    for h in holdings[:3]: # Top 3 only
+    for h in holdings[:3]:
         stock_change = h.get("daily_change", 0.0)
-        # Mock sector average lookup logic
         sector_change = full_analysis.get("sector_performance", {}).get(h.get("sector"), 0.0)
-        if abs(stock_change - sector_change) > 2.0:
-            triggers.append({
+        delta = abs(stock_change - sector_change)
+        if delta > 2.0:
+            severity = "high" if delta > 3.0 else "medium"
+            potential_triggers.append({
                 "type": "divergence",
-                "ticker": h.get("ticker"),
-                "sector": h.get("sector"),
-                "msg": f"Interesting — {h.get('ticker')} is diverging from the {h.get('sector')} sector by over 2% today."
+                "weight": 2,
+                "severity": severity,
+                "topic": f"divergence_{h.get('ticker')}",
+                "data": {"ticker": h.get("ticker"), "sector": h.get("sector")},
+                "msg": f"{h.get('ticker')} is decoupling from the {h.get('sector')} sector trends."
             })
 
-    # 3. Unaddressed Conflicts
+    # 3. Conflict Check (Weight 2)
     conflicts = reason_results.get("conflicts", [])
-    query_lower = user_query.lower()
-    if conflicts and not any(kw in query_lower for kw in ["conflict", "mismatch", "why falling", "why rising"]):
-        triggers.append({
+    if conflicts and "conflict" not in user_query.lower():
+        potential_triggers.append({
             "type": "conflict",
-            "msg": "I detected a conflict between positive news and falling prices in some holdings."
+            "weight": 2,
+            "severity": "medium",
+            "topic": "price_news_mismatch",
+            "msg": "I've detected a mismatch between positive sentiment and price action in some holdings."
         })
 
-    return triggers
-
-def generate_proactive_insight(tool_data: dict, user_query: str, last_insight: str = None) -> dict:
-    """
-    Selects ONE unique proactive insight and follow-up query.
-    """
-    triggers = detect_proactive_signals(tool_data, user_query)
-    
-    if not triggers:
+    if not potential_triggers:
         return None
 
-    # Pick the most relevant trigger (priority: conflict > divergence > concentration)
-    # Filter out if identical to last insight
-    selected = None
-    for t_type in ["conflict", "divergence", "concentration"]:
-        candidate = next((t for t in triggers if t["type"] == t_type), None)
-        if candidate and candidate["msg"] != last_insight:
-            selected = candidate
-            break
-    
-    if not selected:
-        return None
+    # FILTER & PRIORITIZE
+    # Filter out last topic to avoid repetition
+    active_triggers = [t for t in potential_triggers if t["topic"] != last_topic]
+    if not active_triggers: return None
 
-    # Map to follow-up prompt
+    # Sort by weight + severity (high adds 1 to weight)
+    for t in active_triggers:
+        t["score"] = t["weight"] + (1 if t["severity"] == "high" else 0)
+    
+    active_triggers.sort(key=lambda x: x["score"], reverse=True)
+    selected = active_triggers[0]
+
+    # NARRATIVE CONSTRUCTION
+    icon = "⚠️" if selected["severity"] == "high" else "ℹ️"
+    prefix = random.choice(PREFIXES)
+    body = selected["msg"]
+    
+    # MEMORY BRIDGING
+    bridge = ""
+    if session_memory and len(session_memory) > 0:
+        last_turn = session_memory[-1]
+        # If new signal relates to last turn's intents or drivers, reference it
+        if selected["type"] == "concentration" and selected["data"]["sector"] in [d.get("sector") for d in last_turn.get("drivers", [])]:
+            bridge = f" This reinforces the {selected['data']['sector']} focus we analyzed earlier."
+        elif selected["type"] == "divergence" and selected["data"]["ticker"] in last_turn.get("user_query", ""):
+            bridge = " This adds context to the ticker move we were just looking at."
+
+    final_text = f"{icon} {prefix} {body}{bridge} Want a deep dive investigation?"
+
+    # FOLLOW-UP MAPPING
     follow_up_map = {
-        "concentration": f"Analyze concentration risk in {selected.get('sector')}",
-        "divergence": f"Why is {selected.get('ticker')} diverging from {selected.get('sector')}?",
-        "conflict": "Explain the price-news conflict in detail"
+        "concentration": f"Analyze rebalancing for {selected['data'].get('sector')} heavy exposure",
+        "divergence": f"Why is {selected['data'].get('ticker')} decoupling from {selected['data'].get('sector')}?",
+        "conflict": "Give me a full breakdown of the news vs price conflict"
     }
 
     return {
-        "insight": selected["msg"],
-        "follow_up": follow_up_map.get(selected["type"]),
-        "type": selected["type"]
+        "text": final_text,
+        "followup_query": follow_up_map.get(selected["type"]),
+        "type": selected["type"],
+        "topic": selected["topic"]
     }

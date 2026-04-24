@@ -15,7 +15,7 @@ from app.reasoning.router import execute_intents
 from app.reasoning.response_generator import stream_advisory_response
 from app.reasoning.response_polisher import polish_response
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
-from app.reasoning.proactive_engine import generate_proactive_insight # Proactive Upgrade
+from app.reasoning.proactive_engine import generate_proactive_insight
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -40,11 +40,11 @@ if "current_portfolio" not in st.session_state:
 if "last_tool_data" not in st.session_state:
     st.session_state.last_tool_data = None
 
-if "proactive_follow_up" not in st.session_state:
-    st.session_state.proactive_follow_up = None
+if "proactive_metadata" not in st.session_state:
+    st.session_state.proactive_metadata = None
 
-if "last_insight_msg" not in st.session_state:
-    st.session_state.last_insight_msg = None
+if "last_insight_topic" not in st.session_state:
+    st.session_state.last_insight_topic = None
 
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
@@ -77,7 +77,7 @@ def interpret_conf(c):
 with st.sidebar:
     st.title("📊 AlphaTrace Hub")
     selected_label = st.selectbox(
-        "Active Context", 
+        "Context Portfolio", 
         options=list(PORTFOLIO_MAPPING.keys()),
         index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0
     )
@@ -88,6 +88,7 @@ with st.sidebar:
         st.session_state.memory = []
         st.session_state.messages = []
         st.session_state.last_tool_data = None
+        st.session_state.last_insight_topic = None
         st.rerun()
 
     if st.session_state.last_tool_data:
@@ -100,7 +101,7 @@ with st.sidebar:
         
         exposure = full_analysis.get("sector_exposure", {})
         if exposure:
-            st.caption("Sector exposure")
+            st.caption("Sector highlights")
             top_sector = max(exposure, key=exposure.get)
             st.write(f"**Top:** {top_sector}")
             df_exposure = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
@@ -109,22 +110,20 @@ with st.sidebar:
             st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
-    st.caption("Proactive Monitoring: ACTIVE")
+    st.caption("Proactive Reasoning: ACTIVE")
 
 # --- Chat Display ---
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         
-        # UI Hook for Proactive Suggestion (only on the last assistant message)
-        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1 and st.session_state.proactive_follow_up:
-            if st.button(f"🔍 Perform Follow-up: {st.session_state.proactive_follow_up}", key="proactive_btn"):
-                # Simulate user sending the recommended follow-up
-                follow_up_query = st.session_state.proactive_follow_up
-                st.session_state.proactive_follow_up = None # Consume it
-                # We can't easily auto-trigger chat input from here, but we can append to messages and rerun
-                # Let's set a flag to auto-process on rerun
-                st.session_state.auto_prompt = follow_up_query
+        # UI Button for Proactive Follow-up
+        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1 and st.session_state.proactive_metadata:
+            meta = st.session_state.proactive_metadata
+            if st.button(f"🔍 Analyze this signal: {meta['type'].title()}", key="proactive_btn"):
+                follow_up = meta['followup_query']
+                st.session_state.proactive_metadata = None # Consume
+                st.session_state.auto_prompt = follow_up
                 st.rerun()
 
 # --- Auto Prompt Handling ---
@@ -137,12 +136,12 @@ else:
 # --- Reasoning Cycle ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    if not hasattr(st.session_state, "auto_prompt"): st.rerun() # Ensure UI updates before processing
+    if not hasattr(st.session_state, "auto_prompt"): st.rerun()
 
     with st.chat_message("assistant"):
         try:
             # 1. ANALYTICAL PHASE
-            with st.spinner("Executing Intelligence Pipeline..."):
+            with st.spinner("Executing Intelligent Pipeline..."):
                 recent_memory = st.session_state.memory[-3:]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_memory}
                 
@@ -169,13 +168,18 @@ if prompt:
                     }
                     prof = get_portfolio_context(st.session_state.current_portfolio)
 
-                    # 3. PROACTIVE ENGINE Hook
-                    proactive = generate_proactive_insight(tool_data, prompt, st.session_state.last_insight_msg)
+                    # 3. ADVANCED PROACTIVE Hook
+                    proactive = generate_proactive_insight(
+                        tool_data, 
+                        prompt, 
+                        st.session_state.memory, 
+                        st.session_state.last_insight_topic
+                    )
                     if proactive:
-                        st.session_state.proactive_follow_up = proactive["follow_up"]
-                        st.session_state.last_insight_msg = proactive["insight"]
+                        st.session_state.proactive_metadata = proactive
+                        st.session_state.last_insight_topic = proactive["topic"]
                     else:
-                        st.session_state.proactive_follow_up = None
+                        st.session_state.proactive_metadata = None
 
             # 2. NARRATIVE PHASE
             if validation["action"] == "execute":
@@ -191,9 +195,9 @@ if prompt:
                 
                 final_response = st.write_stream(stream_gen)
                 
-                # Append Proactive Insight to response
-                if st.session_state.proactive_follow_up:
-                    insight_block = f"\n\n**💡 Proactive Insight:** {st.session_state.last_insight_msg} Want me to investigate?"
+                # Append Advanced Proactive Insight
+                if st.session_state.proactive_metadata:
+                    insight_block = f"\n\n{st.session_state.proactive_metadata['text']}"
                     st.markdown(insight_block)
                     final_response += insight_block
 
@@ -206,4 +210,4 @@ if prompt:
 
         except Exception as e:
             logger.error(f"Execution Error: {e}")
-            st.error("Engine Sync Failure. Attempting recovery...")
+            st.error("Engine Timeout. Reconnecting...")
