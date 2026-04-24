@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any
 from app.ingestion.data_loader import DataLoader
+from app.utils.helpers import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -24,40 +25,29 @@ def normalize_holdings(loader: DataLoader, portfolio: dict) -> Dict[str, dict]:
             
         symbol = raw_symbol.strip().upper()
         
-        # Fix 5: Sector validation
-        sector = stock_to_sector.get(symbol)
-        if sector is None:
-            # Fix 7: Logging per skipped entry
-            logger.warning(f"Skipping {symbol}: No sector mapping found in registry.")
-            continue
+        # Fix 5: Sector validation (FALLBACK TO "Other" instead of skipping)
+        sector = stock_to_sector.get(symbol, "Other")
             
         # Fix 3: Explicit float casting for weight and change
         original_weight_val = item.get("weight_in_portfolio", item.get("weight_percent", item.get("weight", 0)))
-        try:
-            weight = float(original_weight_val)
-            
-            # Fix 1: Weight normalization safety
-            if weight > 1.0:
-                weight = weight / 100.0
-            
-            # Fix 2: Skip invalid weights
-            if weight <= 0:
-                logger.warning(f"Skipping {symbol}: Invalid weight value {weight}.")
-                continue
-                
-            # Clamp to [0, 1] for safety
-            weight = max(0.0, min(1.0, weight))
-            
-        except (ValueError, TypeError):
-            logger.warning(f"Skipping {symbol}: Non-numeric weight value '{original_weight_val}'.")
+        
+        weight = safe_float(original_weight_val)
+        
+        # Fix 1: Weight normalization safety
+        if weight > 1.0:
+            weight = weight / 100.0
+        
+        # Fix 2: Skip invalid weights
+        if weight <= 0:
+            logger.warning(f"Skipping {symbol}: Invalid weight value {weight}.")
             continue
+            
+        # Clamp to [0, 1] for safety
+        weight = max(0.0, min(1.0, weight))
             
         # Day change validation
         raw_change = item.get("day_change_percent", item.get("day_change", 0.0))
-        try:
-            day_change = float(raw_change)
-        except (ValueError, TypeError):
-            day_change = 0.0
+        day_change = safe_float(raw_change)
             
         # Fix 8: Ensure clean output / Fix 6: Debug field
         normalized[symbol] = {
