@@ -114,8 +114,11 @@ if st.session_state.pending_prompt:
         try:
             # 1. ANALYTICAL PHASE
             with st.spinner("Executing Intelligence pipeline..."):
-                current_turn = len(st.session_state.memory)
-                recent_mem = st.session_state.memory[-3:]
+                # Defensive check for memory slicing
+                msg_mem = st.session_state.memory if isinstance(st.session_state.memory, list) else []
+                current_turn = len(msg_mem)
+                recent_mem = msg_mem[-3:]
+                
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                 
                 resolution = resolve_context(active_prompt, session_wrapped)

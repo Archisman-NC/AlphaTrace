@@ -21,12 +21,7 @@ Your job is to resolve ambiguous user queries using structured memory episodes.
 2. Resolve pronouns like "it", "this", "that", or follow-up "why" questions.
 3. Identify the target portfolio ID from continuity.
 
-## INPUT:
-- user_query: current query
-- current_portfolio: active selection
-- recent_episodes: list of past turns with summary, drivers, and intents.
-
-## OUTPUT:
+## OUTPUT (STRICT JSON):
 {
   "resolved_query": "expanded string",
   "portfolio_id": "resolved ID",

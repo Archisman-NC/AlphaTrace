@@ -16,12 +16,7 @@ CLASSIFIER_SYSTEM_PROMPT = """
 You are a high-precision financial intent classification engine.
 Use the active_memory context to disambiguate user queries.
 
-## INPUT:
-- user_query: current user input
-- current_portfolio: active selection
-- active_memory: prioritized past drivers, risks, and metrics.
-
-## OUTPUT FORMAT (STRICT):
+## OUTPUT FORMAT (STRICT JSON):
 {
   "intent": ["full_analysis", "reason", "risk", "switch_portfolio"],
   "portfolio_id": "PORTFOLIO_XXX",
