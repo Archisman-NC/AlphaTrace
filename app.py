@@ -1,118 +1,127 @@
+import streamlit as st
 import os
-import io
-import re
-import gradio as gr
-from contextlib import redirect_stdout
-from main import run_pipeline
+import json
+import logging
+from dotenv import load_dotenv
 
-def clean_output(text):
-    """
-    Cleans raw pipeline output by removing debug logs, system timing, 
-    and redundant traces to present a user-facing financial briefing.
-    """
-    lines = text.split('\n')
-    cleaned = []
-    
-    # Noise patterns to exclude
-    noise_patterns = [
-        r"^\[RULE CHECK INPUT\]",
-        r"^\[EVAL\]",
-        r"^\[LANGFUSE\]",
-        r"^\[PHASE\]",
-        r"^\d{4}-\d{2}-\d{2}",  # Standard timestamps
-        r"^Starting Autonomous Financial Advisor Agent",
-        r"^Analysis Complete",
-        r"^\s*$" # Empty lines (we handle spacing later)
-    ]
-    
-    for line in lines:
-        if any(re.match(p, line) for p in noise_patterns):
-            continue
-        
-        # Style transformations
-        l = line.strip()
-        if "─" in l or "═" in l:
-            cleaned.append("---")
-        elif "[FINAL ADVISORY EXPLANATION]" in l:
-            cleaned.append("## 📝 Strategic Advisory Briefing")
-        elif "Top Drivers:" in l:
-            cleaned.append("### 🚀 Primary Market Drivers")
-        elif "Risks & Anomalies:" in l:
-            cleaned.append("### ⚠️ Risk Assessment")
-        elif "[SYSTEM CONFIDENCE]" in l:
-            cleaned.append(f"**{l}**")
-        elif "[AI JUDGE SCORE]" in l:
-            cleaned.append(f"**{l}**")
-        elif "📊" in l:
-            cleaned.append(f"# {l}")
-        elif l.startswith("- ") or l.startswith("* "):
-            cleaned.append(line) # Keep bullet points
-        else:
-            cleaned.append(line)
-            
-    return "\n\n".join(cleaned)
+# Import Reasoning Stack
+from app.reasoning.context_resolver import resolve_context
+from app.reasoning.intent_classifier import classify_intent
+from app.reasoning.intent_validator import validate_and_route
+from app.reasoning.router import execute_intents
+from app.reasoning.response_generator import generate_advisory_response
 
-def run_analysis(selected_portfolio):
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# --- Page Config ---
+st.set_page_config(page_title="AlphaTrace AI Copilot", page_icon="📊", layout="wide")
+
+# --- Session Initialization ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "current_portfolio" not in st.session_state:
+    st.session_state.current_portfolio = "PORTFOLIO_001"
+
+if "last_analysis" not in st.session_state:
+    st.session_state.last_analysis = None
+
+# --- Custom Logic: Reasoning Pipeline ---
+def get_alpha_trace_response(user_input: str) -> str:
     """
-    Executes the AlphaTrace pipeline and applies aesthetic filtering 
-    to the results before rendering in the UI.
+    Executes the full AlphaTrace reasoning cycle from query to narrative synthesis.
     """
-    f = io.StringIO()
     try:
-        with redirect_stdout(f):
-            if selected_portfolio == "ALL":
-                portfolio_list = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
-            else:
-                portfolio_list = [selected_portfolio]
-            
-            run_pipeline(portfolio_list)
+        # Step 0: Context Resolution (Memory)
+        session_context = {
+            "current_portfolio": st.session_state.current_portfolio,
+            "last_analysis": st.session_state.last_analysis
+        }
+        resolution = resolve_context(user_input, session_context)
+        resolved_query = resolution["resolved_query"]
+        portfolio_id = resolution["portfolio_id"]
         
-        raw_output = f.getvalue()
-        if not raw_output:
-            return "Analysis complete. No output captured."
+        # Step 1: Intent Classification
+        classification = classify_intent(resolved_query, portfolio_id, st.session_state.messages)
         
-        return clean_output(raw_output)
+        # Step 2: Intent Validation
+        validation = validate_and_route(resolved_query, classification)
+        
+        if validation["action"] == "fallback":
+            return f"I'm sorry, I couldn't clearly understand the request. {validation.get('reason', '')}"
+        
+        if validation["action"] == "clarify":
+            return f"I think I understand, but could you clarify? {validation.get('reason', '')}"
+
+        # Step 3: Execution Routing
+        # Note: In production, we'd pull real tool outputs here. 
+        # For now, we simulate execution based on validated intents.
+        execution_results = execute_intents({
+            "intent": validation["validated_intent"],
+            "portfolio_id": validation["portfolio_id"],
+            "confidence": validation["confidence"]
+        }, {"current_portfolio": st.session_state.current_portfolio})
+        
+        # Update State if portfolio switched
+        st.session_state.current_portfolio = execution_results["portfolio_id"]
+
+        # Aggregate data for generator
+        tool_data = {}
+        for result in execution_results["results"]:
+            tool_data[result["type"]] = result["data"]
+
+        # Step 4: Narrative Synthesis
+        response = generate_advisory_response(
+            resolved_query,
+            validation["validated_intent"],
+            execution_results["portfolio_id"],
+            tool_data,
+            {"risk_tolerance": "high", "experience_level": "advanced"} # Mock profile
+        )
+        
+        # Save analysis for next turn context
+        st.session_state.last_analysis = {"summary": response}
+        
+        return response
+
     except Exception as e:
-        return f"### ❌ Error during analysis\n{str(e)}"
+        logger.error(f"Reasoning Pipeline Error: {e}")
+        return f"System Error: I encountered an issue processing your request. Please check my status logs."
 
-# Define Refined Gradio UI
-with gr.Blocks(title="AlphaTrace | Causal Intelligence") as demo:
-    with gr.Column(elem_id="container"):
-        gr.Markdown("# 🔍 AlphaTrace: Causal Reasoning Engine")
-        gr.Markdown(
-            "Bridging raw market volatility and human-readable insights using deterministic "
-            "causal pipelines and AI-driven synthesis."
-        )
-        
-        with gr.Row():
-            portfolio_selector = gr.Dropdown(
-                choices=["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003", "ALL"],
-                value="PORTFOLIO_001",
-                label="Select Portfolio Entity"
-            )
-            run_btn = gr.Button("Run Reasoning Cycle", variant="primary")
-        
-        gr.Markdown("---")
-        
-        output_display = gr.Markdown(
-            label="Analysis Briefing",
-            value="*Results will appear here after starting the reasoning cycle.*"
-        )
-        
-        gr.Markdown("---")
-        
-        with gr.Accordion("System Information", open=False):
-            gr.Markdown(
-                "**Architecture:** Multi-stage deterministic pipeline  \n"
-                "**Engine:** Llama-3.3-70B (Groq)  \n"
-                "**Observability:** Langfuse Tracing Enabled"
-            )
+# --- UI Layout ---
+st.title("📊 AlphaTrace AI Copilot")
+st.markdown("*Analyze your portfolio conversationally using causal AI.*")
 
-    run_btn.click(
-        fn=run_analysis,
-        inputs=[portfolio_selector],
-        outputs=[output_display]
-    )
+# --- Sidebar info ---
+with st.sidebar:
+    st.header("Session Status")
+    st.info(f"**Active Portfolio:** {st.session_state.current_portfolio}")
+    if st.button("Reset Session"):
+        st.session_state.messages = []
+        st.session_state.last_analysis = None
+        st.rerun()
 
-if __name__ == "__main__":
-    demo.launch()
+# --- Chat Display ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- Chat Input ---
+if prompt := st.chat_input("How can I help with your portfolio today?"):
+    # 1. Display User Message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # 2. Process & Display Assistant Response
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing causal chains..."):
+            response = get_alpha_trace_response(prompt)
+            st.markdown(response)
+    
+    st.session_state.messages.append({"role": "assistant", "content": response})

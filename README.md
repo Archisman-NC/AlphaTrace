@@ -3,7 +3,7 @@ title: AlphaTrace
 emoji: 📊
 colorFrom: blue
 colorTo: indigo
-sdk: gradio
+sdk: streamlit
 app_file: app.py
 python_version: 3.12
 pinned: false
