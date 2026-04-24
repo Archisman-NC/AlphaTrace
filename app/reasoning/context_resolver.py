@@ -4,8 +4,11 @@ import logging
 import time
 from groq import Groq
 from dotenv import load_dotenv
-from app.utils.helpers import langfuse
 from app.reasoning.memory_engine import extract_relevant_memory
+
+def get_langfuse():
+    from app.utils.helpers import langfuse
+    return langfuse
 
 # Load environment variables
 load_dotenv()
@@ -59,9 +62,10 @@ def resolve_context(user_query: str, session: dict) -> dict:
     system_msg = RESOLVER_SYSTEM_PROMPT
     user_msg = json.dumps(resolution_input)
     
+    lf = get_langfuse()
     trace = None
-    if hasattr(langfuse, "trace"):
-        trace = langfuse.trace(
+    if hasattr(lf, "trace"):
+        trace = lf.trace(
             name="context_resolution",
             metadata={"portfolio_id": session.get("current_portfolio"), "stage": "context"}
         )
@@ -93,7 +97,7 @@ def resolve_context(user_query: str, session: dict) -> dict:
                 },
                 metadata={"latency": latency}
             )
-            langfuse.flush()
+            lf.flush()
 
         result = json.loads(output_text)
         

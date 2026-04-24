@@ -10,10 +10,13 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 def safe_float(x):
-    """Hardened float conversion: No crashes."""
+    """
+    Explicitly safe float conversion.
+    Prevents runtime crashes on malformed financial data.
+    """
     try:
         return float(x)
-    except:
+    except (ValueError, TypeError):
         return 0.0
 
 
