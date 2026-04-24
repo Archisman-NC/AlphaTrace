@@ -2,22 +2,22 @@ import sys
 import os
 import time
 
+print("🚀 CLEAN IMPORT SYSTEM ACTIVE")
+# --- Path Stabilization Sentinel (Part 4) ---
+# Ensures Python accurately recognizes the 'app' package in Streamlit
+sys.path.append(os.path.abspath("."))
 
-# --- Path Stabilization Sentinel ---
-# Ensures absolute imports resolve to the project root
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
-import os
 import json
 import logging
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 from app.utils.helpers import safe_float
+
 # --- Namespace Integrity Check ---
 try:
     import app
-    print("🚀 CLEAN IMPORT SYSTEM ACTIVE")
     print(f"[BOOT] Package 'app' resolved to: {app.__file__}")
 except Exception as e:
     print(f"[CRITICAL] AlphaTrace structural failure: {e}")
