@@ -144,9 +144,9 @@ if st.session_state.pending_prompt:
                     st.markdown(res_path); st.session_state.messages.append({"role": "assistant", "content": res_path})
                 else:
                     execution_results = execute_intents({
-                        "intent": validation["validated_intent"],
-                        "portfolio_id": validation["portfolio_id"],
-                        "confidence": validation["confidence"]
+                        "intent": validation.get("validated_intent", ["full_analysis"]),
+                        "portfolio_id": validation.get("portfolio_id", st.session_state.current_portfolio),
+                        "confidence": validation.get("confidence", 0.5)
                     }, {"current_portfolio": st.session_state.current_portfolio})
                     
                     st.session_state.current_portfolio = execution_results["portfolio_id"]

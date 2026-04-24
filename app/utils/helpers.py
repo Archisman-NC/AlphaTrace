@@ -24,13 +24,7 @@ def safe_slice(x, n=3, **kwargs):
     """
     if "k" in kwargs:
         n = kwargs["k"]
-
-    try:
-        if isinstance(x, list):
-            return x[:n]
-        return x
-    except Exception:
-        return x
+    return x[:n] if isinstance(x, list) else x
 
 def build_stock_to_sector_map(data):
     """
