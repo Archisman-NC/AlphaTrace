@@ -3,7 +3,7 @@ import os
 from typing import Dict, List, Any
 # Standardized Imports
 # Standardized Imports
-from app.utils.helpers import safe_slice, safe_float
+from app.utils.helpers import safe_float
 
 # Analytical Components
 from app.ingestion.data_loader import DataLoader
@@ -87,7 +87,7 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return {
             "type": "reason", "status": "success",
             "summary": f"Analytical check complete for {p_id}.",
-            "drivers": safe_slice(chains, k=5), "risks": safe_slice(conflicts, k=3),
+            "drivers": chains[:5], "risks": conflicts[:3],
             "metrics": {
                 "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"]),
                 "sector_exposure": ctx["exposure"],
@@ -106,7 +106,7 @@ def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return {
             "type": "risk", "status": "success",
             "summary": "Risk scan complete.",
-            "drivers": [], "risks": safe_slice(risks, k=3),
+            "drivers": [], "risks": risks[:3],
             "metrics": {
                 "sector_exposure": ctx["exposure"], 
                 "ranked_holdings": ctx["ranked_holdings"]

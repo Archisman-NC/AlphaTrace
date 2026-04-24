@@ -17,14 +17,13 @@ def safe_float(x):
         return 0.0
 
 
-def safe_slice(x, n=3, **kwargs):
+def safe_slice(arr, start=None, end=None):
     """
-    Omni-Argument slicing utility.
-    Ingests and safely ignores inconsistent kwargs (k, reverse, etc.)
+    Type-safe slicing utility.
     """
-    if "k" in kwargs:
-        n = kwargs["k"]
-    return x[:n] if isinstance(x, list) else x
+    if not isinstance(arr, list):
+        return arr
+    return arr[start:end]
 
 def build_stock_to_sector_map(data):
     """

@@ -1,6 +1,6 @@
 import time
 from typing import List, Dict, Any, Optional
-from app.utils.helpers import safe_slice
+from typing import List, Dict, Any, Optional
 
 def normalize_memory_turn(
     portfolio_id: str,
@@ -10,28 +10,30 @@ def normalize_memory_turn(
     tool_data: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Standardizes a memory episode using Safe-Slicing.
+    Standardizes a memory episode using Direct-Slicing.
     """
     reason_results = tool_data.get("reason", {})
     raw_drivers = reason_results.get("drivers", reason_results.get("chains", []))
     
-    # SAFE SLICE DRIVERS
+    # DIRECT SLICE DRIVERS
     print(f"[DEBUG] Slicing drivers type: {type(raw_drivers)}")
     normalized_drivers = []
-    for d in safe_slice(raw_drivers, k=3): 
+    # DIRECT SLICE MIGRATION
+    for d in raw_drivers[:3]: 
         normalized_drivers.append({
             "sector": d.get("sector", "Unknown"),
             "cause": d.get("trigger", d.get("cause", "broad market movement")),
             "impact": float(d.get("impact", 0.0))
         })
 
-    # SAFE SLICE RISKS
+    # DIRECT SLICE RISKS
     risk_results = tool_data.get("risk", {})
     raw_risks = risk_results.get("risks", [])
     print(f"[DEBUG] Slicing risks type: {type(raw_risks)}")
     
     normalized_risks = []
-    for r in safe_slice(raw_risks, k=3):
+    # DIRECT SLICE MIGRATION
+    for r in raw_risks[:3]:
         normalized_risks.append({
             "type": r.get("type", "Concentration"),
             "severity": float(r.get("severity", 0.5)),
@@ -61,11 +63,12 @@ def normalize_memory_turn(
 
 def extract_relevant_memory(query: str, memory: List[dict], k=3) -> Dict[str, Any]:
     """
-    Prioritization Engine using Safe-Slicing.
+    Prioritization Engine using Direct-Slicing.
     """
-    # SAFE SLICE RECENT TURNS
+    # DIRECT SLICE RECENT TURNS
     print(f"[DEBUG] Slicing memory type: {type(memory)}")
-    recent = safe_slice(memory, k=k, reverse=True)
+    # DIRECT SLICE MIGRATION (REVERSE + LIMIT)
+    recent = memory[::-1][:k]
     
     if not recent:
         return {"drivers": [], "risks": [], "metrics": {}}
@@ -99,7 +102,7 @@ def extract_relevant_memory(query: str, memory: List[dict], k=3) -> Dict[str, An
     aggregated_context["recent_risks"].sort(key=lambda x: x.get("relevance_score", 0.0), reverse=True)
     
     return {
-        "drivers": safe_slice(aggregated_context["recent_drivers"], k=3),
-        "risks": safe_slice(aggregated_context["recent_risks"], k=3),
+        "drivers": aggregated_context["recent_drivers"][:3],
+        "risks": aggregated_context["recent_risks"][:3],
         "metrics": aggregated_context["last_metrics"]
     }

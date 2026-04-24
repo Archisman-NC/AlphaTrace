@@ -12,7 +12,7 @@ import logging
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
-
+from app.utils.helpers import safe_float
 # --- Namespace Integrity Check ---
 try:
     import app
@@ -101,7 +101,7 @@ with st.sidebar:
         exposure = metrics.get("sector_exposure", {})
         if exposure:
             df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
-            df_exp["Allocation"] = df_exp["Allocation"].apply(lambda x: float(x) if x else 0.0)
+            df_exp["Allocation"] = df_exp["Allocation"].apply(safe_float)
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             # Fix 9: Streamlit stretch layout
@@ -132,7 +132,7 @@ if st.session_state.pending_prompt:
     with st.chat_message("assistant"):
         try:
             with st.spinner("Reasoning..."):
-                recent_mem = safe_slice(st.session_state.memory, k=3, reverse=True)
+                recent_mem = st.session_state.memory[::-1][:3]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                 
                 resolution = resolve_context(active_prompt, session_wrapped)
