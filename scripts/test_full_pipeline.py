@@ -27,18 +27,18 @@ def run_integration_test():
     print("[1] Logic Phase: Classifier & Validator...")
     classification = classify_intent(query, current_portfolio)
     validation = validate_and_route(query, classification)
-    print(f"Intents detected: {validation['validated_intent']}\n")
+    print(f"Intents detected: {validation.get('validated_intent', ['full_analysis'])}\n")
     
-    if validation["action"] != "execute":
-        print(f"FAIL: Logic engine failed to authorize execution. Reason: {validation['reason']}")
+    if validation.get("action") != "execute":
+        print(f"FAIL: Logic engine failed to authorize execution. Reason: {validation.get('reason', 'Unknown')}")
         return
 
     # 2. Execution Router
     print("[2] Execution Phase: Orchestrating Tools...")
     execution_results = execute_intents({
-        "intent": validation["validated_intent"],
-        "portfolio_id": validation["portfolio_id"],
-        "confidence": validation["confidence"]
+        "intent": validation.get("validated_intent", ["full_analysis"]),
+        "portfolio_id": validation.get("portfolio_id", current_portfolio),
+        "confidence": validation.get("confidence", 0.5)
     }, {"current_portfolio": current_portfolio})
     
     tool_data = {r["type"]: r["data"] for r in execution_results["results"]}
@@ -47,8 +47,8 @@ def run_integration_test():
     print("[3] Synthesis Phase: Generating Raw Advisory (Groq)...")
     raw_response = generate_advisory_response(
         query,
-        validation["validated_intent"],
-        execution_results["portfolio_id"],
+        validation.get("validated_intent", ["full_analysis"]),
+        execution_results.get("portfolio_id", current_portfolio),
         mock_tool_outputs,
         user_profile
     )
@@ -57,9 +57,9 @@ def run_integration_test():
     print("[4] Polish Phase: Selective OpenAI Refinement...")
     final_response = polish_response(
         raw_response,
-        validation["validated_intent"],
+        validation.get("validated_intent", ["full_analysis"]),
         user_profile,
-        validation["confidence"]
+        validation.get("confidence", 0.5)
     )
     
     print("\n" + "="*50)
