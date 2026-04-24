@@ -1,46 +1,39 @@
-import re
+try:
+    print("[DEBUG] START: app/evaluation/llm_evaluator.py initialization")
+    import re
 
-print("[DEBUG] llm_evaluator initialized")
+    def evaluate_response(response: str, context: dict = None) -> dict:
+        """
+        Standard Heuristic Evaluator.
+        """
+        if not response or not isinstance(response, str):
+            return {"score": 0.0, "details": {}, "feedback": "empty"}
 
-def evaluate_response(response: str, context: dict = None) -> dict:
-    """
-    Standard Heuristic Evaluator: NO-HALLUCINATION verification.
-    Guaranteed to return 'confidence' and 'details'.
-    """
-    if not response or not isinstance(response, str):
+        score = 0
+        if "%" in response: score += 3
+        if any(w in response.lower() for w in ["because", "due to", "driven by"]): score += 3
+        if len(response.split()) > 20: score += 2
+        
+        final_score = float(score)
+        conf = min(0.9, (final_score / 10.0) + 0.1)
+
         return {
-            "score": 0.0, 
-            "confidence": 0.1,
-            "details": {}, 
-            "feedback": "empty input"
+            "score": final_score,
+            "confidence": conf,
+            "details": {
+                "is_quant": "%" in response,
+                "has_causal": "because" in response.lower()
+            },
+            "feedback": "heuristic eval"
         }
 
-    score = 0
-    # 1. Quantitative check
-    if "%" in response:
-        score += 3
-    # 2. Causal logic check
-    causal_markers = ["because", "due to", "driven by", "why", "reason"]
-    if any(word in response.lower() for word in causal_markers):
-        score += 3
-    # 3. Contextual Density
-    word_count = len(response.split())
-    if word_count > 20:
-        score += 2
-        
-    # Scale calculation
-    final_score = float(score)
-    # Heuristic confidence translation
-    conf = min(0.9, (final_score / 10.0) + 0.1)
+    print("[DEBUG] MID: Function evaluate_response defined")
+    
+    # Simulate a potential point of failure (e.g. malformed regex or logic)
+    marker_test = re.compile(r'\b[A-Z]{3,}\b')
+    
+    print("[DEBUG] END: app/evaluation/llm_evaluator.py fully initialized")
 
-    return {
-        "score": final_score,
-        "confidence": conf,
-        "details": {
-            "has_ticker": bool(re.search(r'\b[A-Z]{3,}\b', response)),
-            "is_quant": "%" in response,
-            "has_causal": any(m in response.lower() for m in causal_markers),
-            "sufficient_length": word_count > 20
-        },
-        "feedback": "heuristic evaluation complete"
-    }
+except Exception as e:
+    print(f"[CRASH] evaluator import failed: {e}")
+    # Optionally: print(traceback.format_exc())

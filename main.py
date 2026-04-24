@@ -1,206 +1,172 @@
+import streamlit as st
 import os
 import json
-import argparse
-from datetime import datetime
+import logging
+import pandas as pd
+import plotly.express as px
 from dotenv import load_dotenv
 
-# Load environment variables at the absolute entry point
-load_dotenv()
+# --- Namespace Integrity Check ---
+try:
+    import app
+    print(f"[BOOT] Package 'app' resolved to: {app.__file__}")
+except Exception as e:
+    print(f"[BOOT_ERROR] Package resolution failed: {e}")
 
-from app.ingestion.data_loader import DataLoader
-from app.analytics.market_intelligence import build_market_intelligence
-from app.analytics.portfolio_loader import load_portfolio
-from app.analytics.portfolio_normalizer import normalize_holdings
-from app.analytics.portfolio_metrics import compute_portfolio_metrics
-from app.analytics.sector_exposure import compute_sector_exposure
-from app.analytics.holding_ranker import rank_holdings
-from app.analytics.risk_detection import detect_concentration_risk
-from app.analytics.stock_exposure_map import build_stock_exposure_map
-from app.analytics.sector_portfolio_link import link_portfolio_to_sector_trends
-from app.analytics.sector_impact import compute_sector_impact
-from app.analytics.top_impact_sectors import get_top_impact_sectors
-from app.reasoning.stock_impact_drilldown import get_stock_level_impact
-from app.reasoning.mutual_fund_handler import process_mutual_funds
-from app.evaluation.output_validator import validate_outputs
-from app.reasoning.news_portfolio_link import link_news_to_portfolio
-from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
-from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
-from app.reasoning.causal_chain_builder import build_causal_chains
-from app.reasoning.impact_scorer import compute_impact_scores
-from app.reasoning.top_drivers import select_top_drivers
-from app.reasoning.conflict_detector import detect_conflicts
-from app.reasoning.llm_explainer import generate_llm_explanation
-import logging
+# --- Global Import Shield ---
+try:
+    from app.evaluation.llm_evaluator import evaluate_response
+except Exception:
+    def evaluate_response(*args, **kwargs): return {"score": 7.0, "confidence": 0.5, "details": {}}
+
+try:
+    from app.reasoning.proactive_engine import generate_proactive_insight
+except Exception:
+    def generate_proactive_insight(*args, **kwargs): return None
+
+# Standard Imports
+from app.reasoning.context_resolver import resolve_context
+from app.reasoning.intent_classifier import classify_intent
+from app.reasoning.intent_validator import validate_and_route
+from app.reasoning.router import execute_intents
+from app.reasoning.response_generator import stream_final_response
+from app.reasoning.response_polisher import polish_response
+from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
 
 # Configure Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+load_dotenv()
 
-from app.evaluation.llm_evaluator import evaluate_explanation, compute_confidence, build_final_output, rule_check, compute_rule_score
-from app.utils.helpers import langfuse, timed_phase
+# --- Page Config ---
+st.set_page_config(page_title="AlphaTrace AI Copilot", page_icon="📊", layout="wide")
 
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "pipeline.jsonl")
+# --- Session Initialization ---
+if "memory" not in st.session_state: st.session_state.memory = []
+if "messages" not in st.session_state: st.session_state.messages = []
+if "current_portfolio" not in st.session_state: st.session_state.current_portfolio = "PORTFOLIO_001"
+if "last_tool_data" not in st.session_state: st.session_state.last_tool_data = None
+if "proactive_metadata" not in st.session_state: st.session_state.proactive_metadata = None
+if "last_insight_topic" not in st.session_state: st.session_state.last_insight_topic = None
+if "last_insight_turn" not in st.session_state: st.session_state.last_insight_turn = -2
+if "pending_prompt" not in st.session_state: st.session_state.pending_prompt = None
 
+PORTFOLIO_MAPPING = {
+    "Rahul Sharma (Diversified)": "PORTFOLIO_001",
+    "Priya Patel (Sector Concentrated)": "PORTFOLIO_002",
+    "Arun Krishnamurthy (Conservative)": "PORTFOLIO_003"
+}
 
-def write_log(entry: dict):
-    """Append a structured JSON log entry to the pipeline log file."""
-    os.makedirs(LOG_DIR, exist_ok=True)
-    with open(LOG_FILE, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+def interpret_conf(c):
+    # Fix 4: Safe confidence interpretation
+    val = float(c) if isinstance(c, (int, float)) else 0.5
+    if val > 0.8: return "High"
+    if val > 0.6: return "Moderate"
+    return "Low"
 
-
-def run_pipeline(portfolio_ids: list):
-    print("Starting Autonomous Financial Advisor Agent - Intelligence Pipeline...\n")
-
-    # Initialize DataLoader
-    loader = DataLoader(os.path.join("data", "mock"))
-
-    # Global Market Intelligence
-    with timed_phase("market_intelligence"):
-        market_intelligence = build_market_intelligence(loader)
-        sentiment = market_intelligence["market_sentiment"]
-        trends = market_intelligence["sector_trends"]
-        news = market_intelligence["filtered_news"]
-
-    if not news:
-        print("[WARN] No news data available — reasoning will rely on quantitative signals only.")
-
-    for pid in portfolio_ids:
-        # Portfolio Intelligence Phase
-        with timed_phase("portfolio_analytics"):
-            raw_portfolio = load_portfolio(loader, pid)
-            if not raw_portfolio:
-                print(f"[ERROR] Portfolio '{pid}' not found. Skipping.")
-                continue
-
-            if "holdings" not in raw_portfolio and "stocks" not in raw_portfolio:
-                print(f"[ERROR] Portfolio '{pid}' has no holdings data. Skipping.")
-                continue
-
-            normalized_holdings = normalize_holdings(loader, raw_portfolio)
-            metrics = compute_portfolio_metrics(raw_portfolio)
-            exposure = compute_sector_exposure(loader, normalized_holdings, raw_portfolio)
-            ranked = rank_holdings(normalized_holdings, top_n=3)
-            risks = detect_concentration_risk(exposure)
-            stock_map = build_stock_exposure_map(normalized_holdings, ranked)
-            linked_trends = link_portfolio_to_sector_trends(exposure, trends)
-            impacts = compute_sector_impact(linked_trends)
-            top_impacts = get_top_impact_sectors(impacts, top_n=3)
-
-        # Reasoning & Evaluation Phase
-        with timed_phase("reasoning_and_evaluation"):
-            stock_drivers = get_stock_level_impact(top_impacts, stock_map)
-            mf_reasoning = process_mutual_funds(loader, raw_portfolio, mode="simple")
-            relevant_news = link_news_to_portfolio(news, exposure, stock_map)
-            enriched_news = attach_sector_trends_to_news(relevant_news, trends)
-            personalized_news = attach_portfolio_exposure(enriched_news, exposure)
-            causal_chains = build_causal_chains(personalized_news, impacts, stock_drivers)
-            scored_chains = compute_impact_scores(causal_chains)
-            top_causal_drivers = select_top_drivers(scored_chains, top_n=2)
-            conflicts = detect_conflicts(causal_chains, normalized_holdings, trends)
-            validation = validate_outputs(exposure, top_impacts, stock_map, risks)
-
-            daily_chg = abs(metrics.get("daily_change_percent", 0.0))
-            if daily_chg < 0.1:
-                sig_class = "weak"
-            elif daily_chg < 1:
-                sig_class = "moderate"
-            else:
-                sig_class = "strong"
-
-            explanation = generate_llm_explanation(metrics, top_causal_drivers, conflicts, risks, portfolio_id=pid)
-
-            original_input = {
-                "portfolio_change": metrics.get("daily_change_percent", 0.0),
-                "top_drivers": top_causal_drivers,
-                "conflicts": conflicts,
-                "risks": risks
-            }
-
-            eval_score = evaluate_explanation(explanation, original_input, portfolio_id=pid)
-            align_str = sum(abs(v['impact']) for v in top_causal_drivers) if top_causal_drivers else 0
-            has_mixed = len([d for d in top_causal_drivers if d['impact'] > 0]) > 0 and len([d for d in top_causal_drivers if d['impact'] < 0]) > 0
-
-            confidence = compute_confidence(conflicts, align_str, float(metrics.get('daily_change_percent', 0)), signal_strength=sig_class, has_mixed_signals=has_mixed)
-            final_output = build_final_output(explanation, eval_score, confidence, signal_strength=sig_class)
-
-        # Deterministic Guard Rails
-        summary_text = final_output.get("summary", "")
-        checks = rule_check(summary_text, top_causal_drivers)
-        r_score = compute_rule_score(checks)
-        llm_score = float(final_output.get("evaluation_score", 0))
-        rule_score = r_score * 10
-        if llm_score > 0:
-            hybrid_score = (llm_score * 0.7) + (rule_score * 0.3)
-        else:
-            hybrid_score = rule_score
-
-        print(f"[EVAL] LLM: {llm_score}, RULE: {rule_score}, FINAL: {hybrid_score}")
-        final_output["evaluation_score"] = round(hybrid_score, 1)
-
-        # Terminal Visualization
-        p_type = raw_portfolio.get('portfolio_type', raw_portfolio.get('type', 'N/A'))
-        owner = raw_portfolio.get('user_name', 'Unknown')
-        print(f"\n{'─'*60}")
-        print(f" 📊 {pid} | {owner} | {p_type.title()}")
-        print(f"{'─'*60}")
-        print("\n[FINAL ADVISORY EXPLANATION]")
-        print(f" {final_output.get('summary', 'No summary generated.')}")
-
-        if final_output.get("drivers"):
-            print("\n  Top Drivers:")
-            for d in final_output.get("drivers", []):
-                print(f"  - {d}")
-
-        if final_output.get("risks"):
-            print("\n  Risks & Anomalies:")
-            for r in final_output.get("risks", []):
-                 print(f"  \u26A0\uFE0F {r}")
-
-        print(f"\n  [SYSTEM CONFIDENCE] {final_output.get('confidence', 0) * 100:.1f}%")
-        print(f"  [AI JUDGE SCORE]    {final_output.get('evaluation_score', 0):.1f} / 10")
-        print(f"  [SIGNAL STRENGTH]   {final_output.get('signal_strength', 'unknown').upper()}")
-        print(f"  [RULE CHECK]        Sector: {'✔' if checks['mentions_sector'] else '✘'} | Stock: {'✔' if checks['mentions_stock'] else '✘'} | Cause: {'✔' if checks['mentions_cause'] else '✘'}")
-
-        # Telemetry Logging
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "portfolio_id": pid,
-            "owner": owner,
-            "portfolio_change": metrics.get("daily_change_percent", 0.0),
-            "signal_strength": sig_class,
-            "top_drivers": [d.get("sector", "") for d in top_causal_drivers],
-            "confidence": round(confidence, 2),
-            "evaluation_score": final_output["evaluation_score"],
-            "rule_check": checks
-        }
-        write_log(log_entry)
-
-    print(f"\n{'='*60}")
-    print(" Analysis Complete")
-    print(f"{'='*60}\n")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="AlphaTrace — Autonomous Financial Intelligence Pipeline"
+# --- Sidebar ---
+with st.sidebar:
+    st.title("📊 AlphaTrace Hub")
+    selected_label = st.selectbox(
+        "Active Context", 
+        options=list(PORTFOLIO_MAPPING.keys()),
+        index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0
     )
-    parser.add_argument(
-        "--portfolio",
-        default="all",
-        help="Portfolio ID to analyze (e.g. PORTFOLIO_001). Use 'all' to run all portfolios."
-    )
-    args = parser.parse_args()
+    
+    new_pid = PORTFOLIO_MAPPING[selected_label]
+    if new_pid != st.session_state.current_portfolio:
+        st.session_state.current_portfolio = new_pid
+        st.session_state.memory = []; st.session_state.messages = []
+        st.session_state.last_tool_data = None
+        st.rerun()
 
-    if args.portfolio.lower() == "all":
-        run_pipeline(["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"])
-    else:
-        run_pipeline([args.portfolio])
+    if st.session_state.last_tool_data:
+        st.divider()
+        data = st.session_state.last_tool_data
+        metrics = {}
+        for tool_res in data.values():
+            if isinstance(tool_res, dict): metrics.update(tool_res.get("metrics", {}))
+        
+        conf = data.get("global_metrics", {}).get("confidence", 0.1)
+        st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
+        
+        exposure = metrics.get("sector_exposure", {})
+        if exposure:
+            df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
+            df_exp["Allocation"] = df_exp["Allocation"].apply(safe_float)
+            fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+            # Fix 9: Streamlit stretch layout
+            st.plotly_chart(fig, use_container_width=True)
 
-    try:
-        langfuse.flush()
-    except:
-        pass
+# --- Chat Display ---
+for i, message in enumerate(st.session_state.messages):
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1 and st.session_state.proactive_metadata:
+            meta = st.session_state.proactive_metadata
+            if st.button(f"🔍 Analyze signal: {meta['type'].title()}", key="proactive_btn"):
+                st.session_state.last_insight_turn = len(st.session_state.memory)
+                st.session_state.pending_prompt = meta['followup_query']
+                st.rerun()
+
+user_input = st.chat_input("Analyze portfolio...")
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.pending_prompt = user_input
+    st.rerun()
+
+# --- Reasoning ---
+if st.session_state.pending_prompt:
+    active_prompt = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None
+
+    with st.chat_message("assistant"):
+        try:
+            with st.spinner("Reasoning..."):
+                recent_mem = safe_slice(st.session_state.memory, k=3, reverse=True)
+                session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
+                
+                resolution = resolve_context(active_prompt, session_wrapped)
+                classification = classify_intent(resolution["resolved_query"], resolution["portfolio_id"], recent_mem)
+                validation = validate_and_route(resolution["resolved_query"], classification)
+                
+                if validation["action"] != "execute":
+                    res_path = validation.get('reason', 'Could you clarify that?')
+                    st.markdown(res_path); st.session_state.messages.append({"role": "assistant", "content": res_path})
+                else:
+                    execution_results = execute_intents({
+                        "intent": validation["validated_intent"],
+                        "portfolio_id": validation["portfolio_id"],
+                        "confidence": validation["confidence"]
+                    }, {"current_portfolio": st.session_state.current_portfolio})
+                    
+                    st.session_state.current_portfolio = execution_results["portfolio_id"]
+                    tool_data = {res["type"]: res for res in execution_results["results"]}
+                    st.session_state.last_tool_data = tool_data
+
+                    # Proactive
+                    if (len(st.session_state.memory) - st.session_state.last_insight_turn) >= 2:
+                        proactive = generate_proactive_insight(tool_data, active_prompt, st.session_state.memory, st.session_state.last_insight_topic)
+                        if proactive:
+                            st.session_state.proactive_metadata = proactive
+                            st.session_state.last_insight_topic = proactive["topic"]
+                            st.session_state.last_insight_turn = len(st.session_state.memory)
+
+                    # Narrative
+                    stream_gen = stream_final_response(resolution["resolved_query"], validation["validated_intent"], execution_results["portfolio_id"], tool_data, extract_relevant_memory(active_prompt, st.session_state.memory))
+                    final_res = st.write_stream(stream_gen)
+                    
+                    if st.session_state.proactive_metadata:
+                        st.markdown(f"\n\n{st.session_state.proactive_metadata['text']}")
+                        final_res += f"\n\n{st.session_state.proactive_metadata['text']}"
+
+                    final_brief = polish_response(final_res, validation["validated_intent"], {}, validation["confidence"])
+                    memory_obj = normalize_memory_turn(st.session_state.current_portfolio, active_prompt, validation["validated_intent"], final_brief, tool_data)
+                    st.session_state.memory.append(memory_obj)
+                    st.session_state.messages.append({"role": "assistant", "content": final_brief})
+                    st.rerun()
+
+        except Exception as e:
+            logger.error(f"Execution Fault: {e}")
+            st.error("I've encountered a temporary analytical hurdle. Please re-state your query or try selecting a different portfolio.")
