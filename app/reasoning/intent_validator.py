@@ -24,8 +24,9 @@ Your mission is to ensure the AI actions queries whenever possible.
 - CLARIFY: ONLY if BOTH intent AND portfolio_id are completely missing.
 
 ## PATTERN OVERRIDES:
-- "best stock", "top performing" -> ranking intent
-- "analysis", "breakdown", "check" -> full_analysis intent
+- "best stock", "top performing", "ranking" -> ranking intent
+- "analysis", "breakdown", "check", "portfolio" -> full_analysis intent
+- "risk", "hazard", "vulnerability", "warning" -> risk intent
 
 Return STRICT JSON.
 """
@@ -43,11 +44,11 @@ def validate_and_route(user_query: str, classification: dict, session_portfolio:
 
     # 1. APPLY PATTERN OVERRIDES (TASK 4)
     q_low = user_query.lower()
-    if any(p in q_low for p in ["best stock", "top performing", "ranking"]):
-        if "ranking" not in classification.get("intent", []):
-            classification.setdefault("intent", []).append("ranking")
-    
-    if any(p in q_low for p in ["analysis", "breakdown", "check"]):
+    if any(p in q_low for p in ["risk", "hazard", "vulnerability", "warning"]):
+        if "risk" not in classification.get("intent", []):
+            classification.setdefault("intent", []).append("risk")
+
+    if any(p in q_low for p in ["analysis", "breakdown", "check", "portfolio"]):
         if "full_analysis" not in classification.get("intent", []):
             classification.setdefault("intent", []).append("full_analysis")
 

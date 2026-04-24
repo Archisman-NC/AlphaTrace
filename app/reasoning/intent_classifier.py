@@ -18,7 +18,7 @@ Use the active_memory context to disambiguate user queries.
 
 ## OUTPUT FORMAT (STRICT JSON):
 {
-  "intent": ["full_analysis", "reason", "risk", "switch_portfolio"],
+  "intent": ["full_analysis", "reason", "risk", "ranking", "switch_portfolio"],
   "portfolio_id": "PORTFOLIO_XXX",
   "confidence": float 
 }
