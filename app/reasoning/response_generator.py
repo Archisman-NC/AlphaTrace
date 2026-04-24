@@ -1,143 +1,103 @@
 import os
 import json
 import logging
-import time
-from typing import Generator
+from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
-from app.utils.helpers import langfuse
-from app.evaluation.llm_evaluator import evaluate_explanation
+from app.utils.helpers import langfuse, safe_slice
+from app.evaluation.llm_evaluator import evaluate_response
 
-# Load environment variables
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
-RESPONSE_SYSTEM_PROMPT = """
-You are AlphaTrace, a financial AI copilot.
+# --- STRICT NO-HALLUCINATION PROMPT ---
+ADVISORY_SYSTEM_PROMPT = """
+You are the AlphaTrace AI Financial Copilot.
+Your mission is to provide high-fidelity, evidence-based reasoning.
 
-## CORE PRINCIPLES:
-1. TRUTH OVER CONFIDENCE: If uncertain, say so.
-2. SPECIFIC > GENERIC: Mention tickers (HDFCBANK, TCS, etc) and specific triggers.
-3. DATA-DRIVEN: Use tool_outputs (%, changes).
-4. MEMORY-PRIORITY: Link to past drivers discussed in memory_context.
+## MANDATORY RULES (ZERO HALLUCINATION):
+1. Only use the provided tool outputs (Market Intel, Causal Chains, Risks).
+2. Do NOT invent numbers, percentages, or facts.
+3. NEVER assume stock performance if not in data.
+4. If tool data is missing or "status": "error", state clearly: "I'm missing some required data to give a precise answer on that."
+5. Professional, concise, and institutional tone.
 
-## STYLE:
-- Direct Answer -> Causal Explanation -> Actionable Insight.
-- Length: 5-8 sentences.
+## STRUCTURE:
+1. Executive Summary (Anchored in drivers)
+2. Risk Context (Anchored in concentration/conflicts)
+3. Actionable Narrative
 """
 
-def _generate_base_response(client: Groq, prompt: str, system_msg: str) -> str:
-    """Internal helper for raw generation."""
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=800
-    )
-    return response.choices[0].message.content.strip()
+def guard_tool_data(tool_outputs: dict) -> bool:
+    """Verifies that the analytical truth is sufficient for reasoning."""
+    if not tool_outputs or "reason" not in tool_outputs:
+        return False
+    
+    reason = tool_outputs.get("reason", {})
+    if reason.get("status") == "error" or not reason.get("drivers", []):
+        return False
+    return True
 
-def generate_validated_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> str:
+def generate_validated_response(input_data: dict) -> str:
     """
-    CENTRAL WRAPER: High-Fidelity Generation -> Evaluation -> Context-Aware Self-Correction.
+    Production-grade generation flow:
+    Guard -> Generate -> Audit -> Correct -> Final
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    except Exception as e:
-        logger.error(f"Groq Init Failed: {e}")
-        return "Synthesis engine is currently offline."
+    except:
+        return "Synthesis engine is currently offline. Please try again later."
 
-    # Prepare complete input context
-    synthesis_input = {
+    # 1. HARD DATA GUARD
+    if not guard_tool_data(input_data.get("tool_outputs", {})):
+        return "I don't have enough verified data to answer that yet. Could you clarify which portfolio or sector you're focusing on?"
+
+    # 2. GENERATION
+    messages = [
+        {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Query: {input_data['user_query']}\nData: {json.dumps(input_data['tool_outputs'])}"}
+    ]
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        temperature=0.1 # Low temp for data grounding
+    )
+    initial_draft = response.choices[0].message.content
+
+    # 3. EVALUATION & SELF-CORRECTION
+    eval_result = evaluate_response(initial_draft)
+    score = eval_result["score"]
+
+    if score < 6.5:
+        correction_msg = [
+            {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Draft: {initial_draft}\nFeedback: {json.dumps(eval_result['details'])}\nFix required: Ground more tightly in the tool data. Do NOT hallucinate."},
+        ]
+        retry_response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=correction_msg,
+            temperature=0.0
+        )
+        return retry_response.choices[0].message.content
+
+    return initial_draft
+
+def stream_final_response(user_query: str, intents: List[str], portfolio_id: str, tool_outputs: dict, memory_context: dict):
+    """
+    Streams the validated, audited, and NO-HALLUCINATION response.
+    """
+    input_data = {
         "user_query": user_query,
         "tool_outputs": tool_outputs,
-        "memory_context": memory_context or {}
-    }
-    user_msg = json.dumps(synthesis_input)
-
-    # LANGFUSE TRACE INITIALIZATION
-    trace = None
-    if hasattr(langfuse, "trace"):
-        trace = langfuse.trace(name="validated_reasoning", metadata={"portfolio_id": portfolio_id})
-
-    # 1. INITIAL GENERATION
-    start_time = time.time()
-    draft = _generate_base_response(client, user_msg, RESPONSE_SYSTEM_PROMPT)
-    initial_latency = time.time() - start_time
-
-    # 2. INITIAL EVALUATION
-    # Pass draft to strict Llama judge
-    eval_result = evaluate_explanation(draft, synthesis_input, portfolio_id)
-    initial_score = eval_result.get("score", 0.0)
-    
-    logger.info(f"[AUDITOR] Initial Score: {initial_score}")
-
-    # OPTIMIZED EARLY EXIT: If score is high enough, don't regenerate
-    if initial_score >= 6.5:
-        if trace:
-            trace.generation(
-                name="reasoning_turn",
-                input=user_msg,
-                output=draft,
-                metadata={"initial_score": initial_score, "retry": False, "final_score": initial_score}
-            )
-            langfuse.flush()
-        return draft
-
-    # 3. CONTEXT-AWARE SELF-CORRECTION
-    logger.info(f"TRIGGERING SELF-CORRECTION: Quality {initial_score} below threshold.")
-    
-    # We pass the SAME DATA + instruction + previous failure to maintain context
-    correction_instruction = {
-        "instruction": "IMPROVE ADVISORY. Previous version was scored low by auditor.",
-        "auditor_feedback": eval_result.get("reason", "Missing specific tickers or quantification."),
-        "requirements": "Mention specific tickers (e.g. HDFCBANK), include %, and match causal trigger.",
-        "previous_draft": draft,
-        "original_data": synthesis_input # CRITICAL: Keep data in context
+        "memory": memory_context
     }
     
-    start_time_retry = time.time()
-    final_text = _generate_base_response(client, json.dumps(correction_instruction), RESPONSE_SYSTEM_PROMPT)
-    retry_latency = time.time() - start_time_retry
-
-    # 4. FINAL EVALUATION (For metrics sanity)
-    final_eval = evaluate_explanation(final_text, synthesis_input, portfolio_id)
-    final_score = final_eval.get("score", 0.0)
-    logger.info(f"[AUDITOR] Final Score: {final_score}")
-
-    if trace:
-        trace.generation(
-            name="reasoning_turn_with_retry",
-            input=json.dumps(correction_instruction),
-            output=final_text,
-            metadata={
-                "initial_score": initial_score,
-                "retry": True,
-                "final_score": final_score,
-                "improvement": final_score - initial_score,
-                "total_latency": initial_latency + retry_latency
-            }
-        )
-        langfuse.flush()
-
-    return final_text
-
-def stream_final_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> Generator[str, None, None]:
-    """
-    Simulated Streaming for Validated Narratives.
-    """
-    final_text = generate_validated_response(
-        user_query=user_query,
-        intents=intents,
-        portfolio_id=portfolio_id,
-        tool_outputs=tool_outputs,
-        memory_context=memory_context
-    )
-
-    words = final_text.split(" ")
-    for word in words:
+    final_text = generate_validated_response(input_data)
+    
+    # Simulate streaming for the audited output
+    for word in final_text.split(" "):
         yield word + " "
-        time.sleep(0.01)
+        time_to_sleep = 0.05
+        import time
+        time.sleep(time_to_sleep)

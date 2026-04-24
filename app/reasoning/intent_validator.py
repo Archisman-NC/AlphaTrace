@@ -11,44 +11,43 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-VALIDATOR_SYSTEM_PROMPT = """
-You are a validation and routing engine for a financial AI system (AlphaTrace).
+VALID_PORTFOLIOS = ["PORTFOLIO_001 (Rahul)", "PORTFOLIO_002 (Priya)", "PORTFOLIO_003 (Arun)"]
 
-Your job is to:
-1. Validate the correctness of an intent classification
-2. Decide what action the system should take (execute | clarify | fallback)
+VALIDATOR_SYSTEM_PROMPT = f"""
+You are the Advisory Guardian for AlphaTrace. 
+Your mission is to ensure the AI only executes tasks it has data for.
 
-Return STRICT JSON only.
+## DATA UNIVERSE:
+- Valid Portfolios: {", ".join(VALID_PORTFOLIOS)}
+- Valid Intents: reason (causal analysis), risk (hazard detection), switch_portfolio (context change).
 
 ## ACTION RULES:
-- EXECUTE: confidence >= 0.5 (PERMISSIVE), or classification is logical.
-- CLARIFY: Only if query is truly unintelligible or missing target data.
-- FALLBACK: Only if query is clearly unrelated to finance.
+- EXECUTE: Confidence >= 0.5 and query maps to valid data.
+- CLARIFY: Query is vague or asks for a user/portfolio not in the universe.
+- FALLBACK: Query is non-financial or inappropriate.
 
-## CONVERSATIONAL RULES:
-- Short queries (e.g. "Why?", "What happened?") are VALID if a portfolio context exists.
-- Proactive follow-ups (e.g. "Analyze rebalancing") MUST be marked as 'execute'.
-- If classification is mostly right, fix it and 'execute'. DO NOT 'clarify' unless stuck.
+## MANDATORY USER FEEDBACK:
+If you action is 'clarify', the 'reason' must be a polite instruction.
+- Example: "I don't have data for that user. I can assist with Rahul, Priya, or Arun's portfolios."
+- Example: "Could you specify what kind of analysis you're looking for?"
 
-## STRICT:
-- Output MUST be valid JSON
-- Keep "reason" under 15 words
+## STRICT NO-LEAK:
+- NEVER mention internal error names or data logic.
+- Return STRICT JSON.
 """
 
 def validate_and_route(user_query: str, classification: dict) -> dict:
     """
-    Validates intent classification with a bias towards execution for a smoother UX.
+    Ensures intent is grounded and user-safe.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
         logger.error(f"Failed to initialize Groq for intent validation: {e}")
         return {
-            "action": "fallback",
-            "validated_intent": classification.get("intent", ["full_analysis"]),
-            "portfolio_id": classification.get("portfolio_id", "N/A"),
-            "confidence": 0.0,
-            "reason": "Internal validation system error"
+            "action": "fallback", "validated_intent": ["full_analysis"],
+            "portfolio_id": "N/A", "confidence": 0.0,
+            "reason": "I'm having trouble connecting to my reasoning engine. Please try again."
         }
 
     validation_input = {
@@ -56,54 +55,32 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
         "classification": classification
     }
 
-    start_time = time.time()
-    
-    system_msg = VALIDATOR_SYSTEM_PROMPT
-    user_msg = json.dumps(validation_input)
-    
-    trace = None
-    if hasattr(langfuse, "trace"):
-        trace = langfuse.trace(
-            name="intent_validation",
-            metadata={"portfolio_id": classification.get("portfolio_id"), "stage": "validation"}
-        )
-
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg}
+                {"role": "system", "content": VALIDATOR_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(validation_input)}
             ],
             response_format={"type": "json_object"},
             temperature=0.0
         )
         
-        output_text = response.choices[0].message.content
-        result = json.loads(output_text)
+        result = json.loads(response.choices[0].message.content)
         
         # NORMALIZE SCHEMA
-        if "validated_intent" not in result:
-            result["validated_intent"] = classification.get("intent", ["full_analysis"])
-        if isinstance(result.get("validated_intent"), str):
-            result["validated_intent"] = [result["validated_intent"]]
-            
-        if "action" not in result:
-            result["action"] = "execute" if classification.get("confidence", 0) > 0.5 else "clarify"
-        result["action"] = result["action"].lower()
-
-        if "portfolio_id" not in result:
-            result["portfolio_id"] = classification.get("portfolio_id", "N/A")
-        if "confidence" not in result:
-            result["confidence"] = classification.get("confidence", 0.0)
+        if "action" not in result: result["action"] = "execute"
+        if "validated_intent" not in result: result["validated_intent"] = classification.get("intent", ["full_analysis"])
+        
+        # Sanitize 'reason' to ensure no internal leakage
+        if result.get("action") == "clarify" and not result.get("reason"):
+            result["reason"] = "Could you please provide more details so I can assist you better?"
             
         return result
     except Exception as e:
         logger.error(f"Intent validation failed: {e}")
         return {
-            "action": "execute", # Default to execute for resilience
-            "validated_intent": classification.get("intent", ["full_analysis"]),
+            "action": "execute", "validated_intent": classification.get("intent", ["full_analysis"]),
             "portfolio_id": classification.get("portfolio_id", "N/A"),
-            "confidence": 0.5,
-            "reason": "Graceful fallback to execution"
+            "confidence": 0.5, "reason": "Self-corrected execution"
         }
