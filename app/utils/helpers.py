@@ -16,10 +16,15 @@ def safe_float(x):
     except:
         return 0.0
 
-def safe_slice(x, n=3):
+
+def safe_slice(x, n=3, k=None):
     """
-    Safely slice lists without breaking non-list inputs.
+    Safe slicing utility.
+    Supports both n and legacy k argument.
     """
+    if k is not None:
+        n = k
+
     try:
         if isinstance(x, list):
             return x[:n]
