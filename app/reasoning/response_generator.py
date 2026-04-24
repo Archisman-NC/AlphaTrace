@@ -50,15 +50,14 @@ def guard_tool_data(tool_outputs: dict) -> bool:
         return False
     
     reason = tool_outputs.get("reason", {})
-    # If it's a list, it's potentially valid chains
     if isinstance(reason, dict) and reason.get("status") == "error":
         return False
     return True
 
 def generate_validated_response(input_data: dict) -> str:
     """
-    Production-grade generation flow:
-    Guard -> Generate -> Audit -> Correct -> Final
+    Production-grade generation flow with SAFETY GATE.
+    Guard -> Generate -> Evaluate -> Gate -> Final
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -81,48 +80,43 @@ def generate_validated_response(input_data: dict) -> str:
             messages=messages,
             temperature=0.1
         )
-        initial_draft = response.choices[0].message.content
+        initial_draft = str(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"Generation failure: {e}")
         return "I encountered an error while synthesizing the advisory response. Please retry."
 
-    # 3. EVALUATION & SELF-CORRECTION
-    eval_result = evaluate_response(initial_draft)
-    score = eval_result.get("score", 0.0)
+    # 3. EVALUATION
+    evaluation = evaluate_response(initial_draft)
+    score = evaluation.get("score", 7.0)
+    print(f"[EVALUATOR] score={score} (Query: {input_data['user_query'][:30]}...)")
 
-    if score < 6.0:
-        try:
-            correction_msg = [
-                {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Draft: {initial_draft}\nFeedback: {json.dumps(eval_result.get('details', {}))}\nFix required: Ground more tightly in the tool data. Do NOT hallucinate."},
-            ]
-            retry_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=correction_msg,
-                temperature=0.0
-            )
-            return retry_response.choices[0].message.content
-        except:
-            return initial_draft
+    # 4. SAFETY GATE (TASK 2)
+    if score < 5.0:
+        print(f"[GUARDRAIL] Low-quality response blocked (score={score})")
+        return "I don't have enough reliable data to give a confident answer. You may want to clarify your query or check the portfolio context."
 
-    return initial_draft
+    # 5. SOFT IMPROVEMENT LAYER (TASK 4)
+    final_output = initial_draft
+    if 5.0 <= score < 6.5:
+        final_output += "\n\n(This analysis is based on limited signals and may not capture the full picture.)"
+
+    return final_output
 
 def stream_final_response(user_query: str, intents: List[str], portfolio_id: str, tool_outputs: dict, memory_context: dict):
     """
-    Streams the validated, audited, and NO-HALLUCINATION response.
+    Streams the validated and SAFETY-GATED response to the UI.
+    Verification happens BEFORE the first word is yielded.
     """
-    # 1. Force absolute list safety for tool outputs
-    standardized_outputs = tool_outputs if isinstance(tool_outputs, dict) else {}
-    
     input_data = {
         "user_query": user_query,
-        "tool_outputs": standardized_outputs,
+        "tool_outputs": tool_outputs if isinstance(tool_outputs, dict) else {},
         "memory": memory_context
     }
     
+    # SAFETY GATE APPLIED HERE
     final_text = generate_validated_response(input_data)
     
-    # Simple word-based streaming emulator
+    # Simulate streaming for the audited output
     for word in final_text.split(" "):
         yield word + " "
         time.sleep(0.04)
