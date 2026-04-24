@@ -1,5 +1,6 @@
 import time
 from typing import List, Dict, Any, Optional
+from app.utils.helpers import safe_slice
 
 def normalize_memory_turn(
     portfolio_id: str,
@@ -9,36 +10,35 @@ def normalize_memory_turn(
     tool_data: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Standardizes a memory episode to ensure structural consistency for active reasoning.
-    Uses 'drivers' and 'risks' as primary keys.
+    Standardizes a memory episode using Safe-Slicing.
     """
-    # 1. Normalize Drivers (Reasoning)
-    # Check both potential keys for backward/transitional consistency
     reason_results = tool_data.get("reason", {})
     raw_drivers = reason_results.get("drivers", reason_results.get("chains", []))
     
-    # Force list type before slicing to prevent slice errors
+    # SAFE SLICE DRIVERS
+    print(f"[DEBUG] Slicing drivers type: {type(raw_drivers)}")
     normalized_drivers = []
-    for d in list(raw_drivers)[:3]: 
+    for d in safe_slice(raw_drivers, k=3): 
         normalized_drivers.append({
             "sector": d.get("sector", "Unknown"),
             "cause": d.get("trigger", d.get("cause", "broad market movement")),
             "impact": float(d.get("impact", 0.0))
         })
 
-    # 2. Normalize Risks
+    # SAFE SLICE RISKS
     risk_results = tool_data.get("risk", {})
     raw_risks = risk_results.get("risks", [])
+    print(f"[DEBUG] Slicing risks type: {type(raw_risks)}")
     
     normalized_risks = []
-    for r in list(raw_risks)[:3]:
+    for r in safe_slice(raw_risks, k=3):
         normalized_risks.append({
             "type": r.get("type", "Concentration"),
             "severity": float(r.get("severity", 0.5)),
             "description": r.get("description", "Potential volatility")
         })
 
-    # 3. Normalize Metrics
+    # AGGREGATE METRICS
     full_analysis = tool_data.get("full_analysis", {})
     metrics = {**full_analysis.get("metrics", {}), **reason_results.get("metrics", {}), **risk_results.get("metrics", {})}
     
@@ -61,14 +61,16 @@ def normalize_memory_turn(
 
 def extract_relevant_memory(query: str, memory: List[dict], k=3) -> Dict[str, Any]:
     """
-    Prioritization Engine with Recency weighting and feature boosting.
+    Prioritization Engine using Safe-Slicing.
     """
-    if not isinstance(memory, list) or not memory:
+    # SAFE SLICE RECENT TURNS
+    print(f"[DEBUG] Slicing memory type: {type(memory)}")
+    recent = safe_slice(memory, k=k, reverse=True)
+    
+    if not recent:
         return {"drivers": [], "risks": [], "metrics": {}}
 
-    recent = list(memory)[-k:]
     query_lower = query.lower()
-    
     boost_risks = any(kw in query_lower for kw in ["risk", "downside", "danger", "safe"])
     boost_drivers = any(kw in query_lower for kw in ["why", "because", "reason", "cause", "driven"])
     
@@ -97,7 +99,7 @@ def extract_relevant_memory(query: str, memory: List[dict], k=3) -> Dict[str, An
     aggregated_context["recent_risks"].sort(key=lambda x: x.get("relevance_score", 0.0), reverse=True)
     
     return {
-        "drivers": aggregated_context["recent_drivers"][:3],
-        "risks": aggregated_context["recent_risks"][:3],
+        "drivers": safe_slice(aggregated_context["recent_drivers"], k=3),
+        "risks": safe_slice(aggregated_context["recent_risks"], k=3),
         "metrics": aggregated_context["last_metrics"]
     }

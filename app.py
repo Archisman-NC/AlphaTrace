@@ -114,10 +114,12 @@ if st.session_state.pending_prompt:
         try:
             # 1. ANALYTICAL PHASE
             with st.spinner("Executing Intelligence pipeline..."):
-                # Defensive check for memory slicing
-                msg_mem = st.session_state.memory if isinstance(st.session_state.memory, list) else []
-                current_turn = len(msg_mem)
-                recent_mem = msg_mem[-3:]
+                # Global Safe Slicing for Memory extraction
+                msg_mem = st.session_state.memory
+                print(f"[DEBUG] Slicing main app memory type: {type(msg_mem)}")
+                
+                current_turn = len(msg_mem) if isinstance(msg_mem, list) else 0
+                recent_mem = safe_slice(msg_mem, k=3, reverse=True)
                 
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                 

@@ -40,6 +40,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def safe_slice(obj, k=3, reverse=False):
+    """
+    Safely slices a list-like object. 
+    Returns empty list if obj is None or incorrect type.
+    """
+    if not isinstance(obj, (list, tuple)):
+        return []
+    
+    if reverse:
+        return obj[-k:] if len(obj) >= k else obj
+    return obj[:k]
+
 @contextmanager
 def timed_phase(name: str):
     """Context manager for measuring and logging the latency of specific pipeline phases."""
