@@ -1,3 +1,11 @@
+import sys
+
+# --- Hot-Reload Module Sanitizer ---
+modules_to_clear = ["app", "app.utils", "app.reasoning", "app.analytics", "app.evaluation"]
+for m in list(sys.modules.keys()):
+    if any(m.startswith(prefix) for prefix in modules_to_clear):
+        del sys.modules[m]
+
 import streamlit as st
 import os
 import json
