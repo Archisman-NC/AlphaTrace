@@ -21,16 +21,14 @@ Your job is to:
 Return STRICT JSON only.
 
 ## ACTION RULES:
-- EXECUTE: confidence >= 0.7, intent is logical, portfolio_id is valid.
-- CLARIFY: confidence 0.4-0.69, or query is ambiguous.
-- FALLBACK: confidence < 0.4, or classification is clearly wrong/invalid.
+- EXECUTE: confidence >= 0.5 (PERMISSIVE), or classification is logical.
+- CLARIFY: Only if query is truly unintelligible or missing target data.
+- FALLBACK: Only if query is clearly unrelated to finance.
 
-## VALIDATION RULES:
-- If query contains "why" -> must include "reason"
-- If query contains "risk/safe/downside" -> must include "risk"
-- If query contains "switch/change" -> must include "switch_portfolio"
-- If classification misses obvious intent -> downgrade action to "clarify"
-- If classification includes irrelevant intent -> remove it
+## CONVERSATIONAL RULES:
+- Short queries (e.g. "Why?", "What happened?") are VALID if a portfolio context exists.
+- Proactive follow-ups (e.g. "Analyze rebalancing") MUST be marked as 'execute'.
+- If classification is mostly right, fix it and 'execute'. DO NOT 'clarify' unless stuck.
 
 ## STRICT:
 - Output MUST be valid JSON
@@ -39,7 +37,7 @@ Return STRICT JSON only.
 
 def validate_and_route(user_query: str, classification: dict) -> dict:
     """
-    Validates the intent classification result and determines the routing action.
+    Validates intent classification with a bias towards execution for a smoother UX.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -81,39 +79,19 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
             temperature=0.0
         )
         
-        latency = time.time() - start_time
         output_text = response.choices[0].message.content
-        
-        if trace:
-            trace.generation(
-                name="validation_call",
-                input={"system": system_msg, "user": user_msg},
-                output=output_text,
-                model="llama-3.1-8b-instant",
-                usage={
-                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
-                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
-                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
-                },
-                metadata={"latency": latency}
-            )
-            langfuse.flush()
-
         result = json.loads(output_text)
         
         # NORMALIZE SCHEMA
-        # 1. Ensure validated_intent exists and is a list
         if "validated_intent" not in result:
             result["validated_intent"] = classification.get("intent", ["full_analysis"])
         if isinstance(result.get("validated_intent"), str):
             result["validated_intent"] = [result["validated_intent"]]
             
-        # 2. Ensure action exists and is lowercase
         if "action" not in result:
-            result["action"] = "fallback"
+            result["action"] = "execute" if classification.get("confidence", 0) > 0.5 else "clarify"
         result["action"] = result["action"].lower()
 
-        # 3. Ensure portfolio_id and confidence are passed through if missing
         if "portfolio_id" not in result:
             result["portfolio_id"] = classification.get("portfolio_id", "N/A")
         if "confidence" not in result:
@@ -123,18 +101,9 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
     except Exception as e:
         logger.error(f"Intent validation failed: {e}")
         return {
-            "action": "fallback",
+            "action": "execute", # Default to execute for resilience
             "validated_intent": classification.get("intent", ["full_analysis"]),
             "portfolio_id": classification.get("portfolio_id", "N/A"),
-            "confidence": 0.0,
-            "reason": "AI validation exception"
-        }
-    except Exception as e:
-        logger.error(f"Intent validation failed: {e}")
-        return {
-            "action": "fallback",
-            "validated_intent": classification.get("intent", ["full_analysis"]),
-            "portfolio_id": classification.get("portfolio_id", "N/A"),
-            "confidence": 0.0,
-            "reason": "AI validation exception"
+            "confidence": 0.5,
+            "reason": "Graceful fallback to execution"
         }
