@@ -22,6 +22,31 @@ load_dotenv()
 st.set_page_config(page_title="AlphaTrace AI Copilot", page_icon="📊", layout="wide")
 
 # --- Session Initialization ---
+# --- Session Initialization ---
+PORTFOLIO_MAPPING = {
+    "Rahul Sharma (Diversified)": "PORTFOLIO_001",
+    "Priya Patel (Sector Concentrated)": "PORTFOLIO_002",
+    "Arun Krishnamurthy (Conservative)": "PORTFOLIO_003",
+    "Master View (Combined)": "ALL_PORTFOLIOS"
+}
+
+# Function to get portfolio metadata from JSON
+def get_portfolio_context(pid):
+    try:
+        with open("data/mock/portfolios.json", "r") as f:
+            data = json.load(f)
+            if pid == "ALL_PORTFOLIOS":
+                return {"risk_tolerance": "medium", "experience_level": "advanced", "name": "Master View"}
+            
+            p = data["portfolios"].get(pid, {})
+            return {
+                "risk_tolerance": p.get("risk_profile", "medium").lower(),
+                "experience_level": "intermediate", # Default for mock
+                "name": p.get("user_name", "User")
+            }
+    except Exception:
+        return {"risk_tolerance": "medium", "experience_level": "intermediate", "name": "User"}
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -59,15 +84,15 @@ def get_alpha_trace_response(user_input: str) -> str:
             return f"I think I understand, but could you clarify? {validation.get('reason', '')}"
 
         # Step 3: Execution Routing
-        # Note: In production, we'd pull real tool outputs here. 
-        # For now, we simulate execution based on validated intents.
+        # Update State if portfolio switched via AI command
+        target_pid = validation["portfolio_id"]
+        
         execution_results = execute_intents({
             "intent": validation["validated_intent"],
-            "portfolio_id": validation["portfolio_id"],
+            "portfolio_id": target_pid,
             "confidence": validation["confidence"]
         }, {"current_portfolio": st.session_state.current_portfolio})
         
-        # Update State if portfolio switched
         st.session_state.current_portfolio = execution_results["portfolio_id"]
 
         # Aggregate data for generator
@@ -76,12 +101,13 @@ def get_alpha_trace_response(user_input: str) -> str:
             tool_data[result["type"]] = result["data"]
 
         # Step 4: Narrative Synthesis
+        prof = get_portfolio_context(st.session_state.current_portfolio)
         raw_response = generate_advisory_response(
             resolved_query,
             validation["validated_intent"],
             execution_results["portfolio_id"],
             tool_data,
-            {"risk_tolerance": "high", "experience_level": "advanced"} # Mock profile
+            prof
         )
         
         # Step 5: Premium Polish (Hybrid Strategy)
@@ -89,7 +115,7 @@ def get_alpha_trace_response(user_input: str) -> str:
         final_response = polish_response(
             raw_response, 
             validation["validated_intent"], 
-            {"risk_tolerance": "high", "experience_level": "advanced"},
+            prof,
             validation["confidence"]
         )
 
@@ -108,9 +134,31 @@ st.markdown("*Analyze your portfolio conversationally using causal AI.*")
 
 # --- Sidebar info ---
 with st.sidebar:
-    st.header("Session Status")
-    st.info(f"**Active Portfolio:** {st.session_state.current_portfolio}")
-    if st.button("Reset Session"):
+    st.header("Select Context")
+    
+    # Portfolio Toggle
+    selected_label = st.selectbox(
+        "Active Portfolio", 
+        options=list(PORTFOLIO_MAPPING.keys()),
+        index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0
+    )
+    
+    new_pid = PORTFOLIO_MAPPING[selected_label]
+    
+    # Trigger Update + Reset if selection changes
+    if new_pid != st.session_state.current_portfolio:
+        st.session_state.current_portfolio = new_pid
+        st.session_state.messages = []
+        st.session_state.last_analysis = None
+        st.success(f"Switched to {selected_label}")
+        st.rerun()
+
+    st.divider()
+    prof_meta = get_portfolio_context(st.session_state.current_portfolio)
+    st.write(f"👤 **User:** {prof_meta['name']}")
+    st.write(f"⚖️ **Risk:** {prof_meta['risk_tolerance'].upper()}")
+    
+    if st.button("Clear Chat"):
         st.session_state.messages = []
         st.session_state.last_analysis = None
         st.rerun()
