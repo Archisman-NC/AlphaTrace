@@ -54,19 +54,19 @@ def resolve_context(user_query: str, session: dict) -> dict:
         "user_query": user_query,
         "session": session
     }
+    start_time = time.time()
+    
+    system_msg = RESOLVER_SYSTEM_PROMPT
+    user_msg = json.dumps(resolution_input)
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="context_resolution",
+            metadata={"portfolio_id": session.get("current_portfolio"), "stage": "context"}
+        )
 
-        start_time = time.time()
-        
-        system_msg = RESOLVER_SYSTEM_PROMPT
-        user_msg = json.dumps(resolution_input)
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="context_resolution",
-                metadata={"portfolio_id": session.get("current_portfolio"), "stage": "context"}
-            )
-
+    try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[

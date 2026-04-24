@@ -34,18 +34,25 @@ def extract_causal_trigger(headline: str, summary: str) -> str:
     if not headline:
         return "unknown market driver"
 
-        start_time = time.time()
-        
-        system_msg = CAUSAL_EXTRACTOR_PROMPT
-        user_msg = f"Headline: {headline}\nSummary: {summary}"
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="causal_extraction",
-                metadata={"stage": "extraction"}
-            )
+    try:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    except Exception as e:
+        logger.error(f"Failed to initialize Groq for causal extraction: {e}")
+        return headline[:50].split(".")[0].strip().lower()
 
+    start_time = time.time()
+    
+    system_msg = CAUSAL_EXTRACTOR_PROMPT
+    user_msg = f"Headline: {headline}\nSummary: {summary}"
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="causal_extraction",
+            metadata={"stage": "extraction"}
+        )
+
+    try:
         # Use llama-3.1-8b-instant for speed
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",

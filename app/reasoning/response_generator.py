@@ -54,18 +54,19 @@ def generate_advisory_response(user_query: str, intents: list, portfolio_id: str
         "user_profile": user_profile
     }
 
-        start_time = time.time()
-        
-        system_msg = RESPONSE_SYSTEM_PROMPT
-        user_msg = json.dumps(synthesis_input)
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="response_generation",
-                metadata={"portfolio_id": portfolio_id, "stage": "generation", "user_persona": user_profile.get("experience_level")}
-            )
+    start_time = time.time()
+    
+    system_msg = RESPONSE_SYSTEM_PROMPT
+    user_msg = json.dumps(synthesis_input)
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="response_generation",
+            metadata={"portfolio_id": portfolio_id, "stage": "generation", "user_persona": user_profile.get("experience_level")}
+        )
 
+    try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[

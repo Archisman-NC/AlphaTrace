@@ -58,18 +58,19 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
         "classification": classification
     }
 
-        start_time = time.time()
-        
-        system_msg = VALIDATOR_SYSTEM_PROMPT
-        user_msg = json.dumps(validation_input)
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="intent_validation",
-                metadata={"portfolio_id": classification.get("portfolio_id"), "stage": "validation"}
-            )
+    start_time = time.time()
+    
+    system_msg = VALIDATOR_SYSTEM_PROMPT
+    user_msg = json.dumps(validation_input)
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="intent_validation",
+            metadata={"portfolio_id": classification.get("portfolio_id"), "stage": "validation"}
+        )
 
+    try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -119,6 +120,15 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
             result["confidence"] = classification.get("confidence", 0.0)
             
         return result
+    except Exception as e:
+        logger.error(f"Intent validation failed: {e}")
+        return {
+            "action": "fallback",
+            "validated_intent": classification.get("intent", ["full_analysis"]),
+            "portfolio_id": classification.get("portfolio_id", "N/A"),
+            "confidence": 0.0,
+            "reason": "AI validation exception"
+        }
     except Exception as e:
         logger.error(f"Intent validation failed: {e}")
         return {

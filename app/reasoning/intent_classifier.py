@@ -71,18 +71,19 @@ def classify_intent(query: str, current_portfolio: str, chat_history: list = Non
         "chat_history": chat_history[-5:] if chat_history else []
     }
 
-        start_time = time.time()
-        
-        system_msg = CLASSIFICATION_SYSTEM_PROMPT
-        user_msg = json.dumps(classification_input)
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="intent_classification",
-                metadata={"portfolio_id": current_portfolio, "stage": "classification"}
-            )
+    start_time = time.time()
+    
+    system_msg = CLASSIFICATION_SYSTEM_PROMPT
+    user_msg = json.dumps(classification_input)
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="intent_classification",
+            metadata={"portfolio_id": current_portfolio, "stage": "classification"}
+        )
 
+    try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[

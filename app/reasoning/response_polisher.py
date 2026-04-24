@@ -59,22 +59,23 @@ def polish_response(raw_response: str, intents: list, user_profile: dict, confid
         logger.info("Skipping OpenAI: Response is concise and high-confidence.")
         return raw_response
 
-        start_time = time.time()
-        
-        system_msg = POLISHER_SYSTEM_PROMPT
-        user_msg = json.dumps({
-            "response": raw_response,
-            "intents": intents,
-            "user_profile": user_profile
-        })
-        
-        trace = None
-        if hasattr(langfuse, "trace"):
-            trace = langfuse.trace(
-                name="premium_polish",
-                metadata={"stage": "polish", "user_persona": user_profile.get("experience_level")}
-            )
+    start_time = time.time()
+    
+    system_msg = POLISHER_SYSTEM_PROMPT
+    user_msg = json.dumps({
+        "response": raw_response,
+        "intents": intents,
+        "user_profile": user_profile
+    })
+    
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(
+            name="premium_polish",
+            metadata={"stage": "polish", "user_persona": user_profile.get("experience_level")}
+        )
 
+    try:
         # Use gpt-4o-mini for efficient premium polishing with cost cap
         response = client.chat.completions.create(
             model="gpt-4o-mini",
