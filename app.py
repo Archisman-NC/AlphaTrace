@@ -2,23 +2,12 @@ import streamlit as st
 import os
 import json
 import logging
-import time
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 
-# --- Fix 1: Hardened Imports ---
-try:
-    from app.utils.helpers import safe_slice, safe_float
-except ImportError:
-    # Secondary Global Fallback for hot-reload resilience
-    def safe_slice(x, k=3, reverse=False):
-        if not isinstance(x, list): return []
-        return x[-k:] if reverse else x[:k]
-    def safe_float(x): 
-        try: return float(x)
-        except: return 0.0
-
+# Standardized Imports
+from app.utils.helpers import safe_slice, safe_float
 from app.reasoning.context_resolver import resolve_context
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route
@@ -49,8 +38,7 @@ if "pending_prompt" not in st.session_state: st.session_state.pending_prompt = N
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
     "Priya Patel (Sector Concentrated)": "PORTFOLIO_002",
-    "Arun Krishnamurthy (Conservative)": "PORTFOLIO_003",
-    "Master View (Combined)": "ALL_PORTFOLIOS"
+    "Arun Krishnamurthy (Conservative)": "PORTFOLIO_003"
 }
 
 def interpret_conf(c):
@@ -81,7 +69,7 @@ with st.sidebar:
         for tool_res in data.values():
             if isinstance(tool_res, dict): metrics.update(tool_res.get("metrics", {}))
         
-        conf = data.get("global_metrics", {}).get("confidence", 0.0)
+        conf = data.get("global_metrics", {}).get("confidence", 0.1)
         st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
         
         exposure = metrics.get("sector_exposure", {})
@@ -90,9 +78,10 @@ with st.sidebar:
             df_exp["Allocation"] = df_exp["Allocation"].apply(safe_float)
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+            # Fix 9: Streamlit stretch layout
             st.plotly_chart(fig, use_container_width=True)
 
-# --- Chat App Logic ---
+# --- Chat Display ---
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -109,13 +98,12 @@ if user_input:
     st.session_state.pending_prompt = user_input
     st.rerun()
 
-# --- EXECUTION GATE ---
+# --- Reasoning ---
 if st.session_state.pending_prompt:
     active_prompt = st.session_state.pending_prompt
     st.session_state.pending_prompt = None
 
     with st.chat_message("assistant"):
-        # Fix 7: Global Safety Layer
         try:
             with st.spinner("Reasoning..."):
                 recent_mem = safe_slice(st.session_state.memory, k=3, reverse=True)
@@ -127,8 +115,7 @@ if st.session_state.pending_prompt:
                 
                 if validation["action"] != "execute":
                     res_path = validation.get('reason', 'Could you clarify that?')
-                    st.markdown(res_path)
-                    st.session_state.messages.append({"role": "assistant", "content": res_path})
+                    st.markdown(res_path); st.session_state.messages.append({"role": "assistant", "content": res_path})
                 else:
                     execution_results = execute_intents({
                         "intent": validation["validated_intent"],
@@ -140,7 +127,7 @@ if st.session_state.pending_prompt:
                     tool_data = {res["type"]: res for res in execution_results["results"]}
                     st.session_state.last_tool_data = tool_data
 
-                    # Proactive Insight
+                    # Proactive
                     if (len(st.session_state.memory) - st.session_state.last_insight_turn) >= 2:
                         proactive = generate_proactive_insight(tool_data, active_prompt, st.session_state.memory, st.session_state.last_insight_topic)
                         if proactive:
@@ -148,14 +135,8 @@ if st.session_state.pending_prompt:
                             st.session_state.last_insight_topic = proactive["topic"]
                             st.session_state.last_insight_turn = len(st.session_state.memory)
 
-                    # Narrative Stream
-                    stream_gen = stream_final_response(
-                        user_query=resolution["resolved_query"],
-                        intents=validation["validated_intent"],
-                        portfolio_id=execution_results["portfolio_id"],
-                        tool_outputs=tool_data,
-                        memory_context=extract_relevant_memory(active_prompt, st.session_state.memory)
-                    )
+                    # Narrative
+                    stream_gen = stream_final_response(resolution["resolved_query"], validation["validated_intent"], execution_results["portfolio_id"], tool_data, extract_relevant_memory(active_prompt, st.session_state.memory))
                     final_res = st.write_stream(stream_gen)
                     
                     if st.session_state.proactive_metadata:
@@ -169,6 +150,5 @@ if st.session_state.pending_prompt:
                     st.rerun()
 
         except Exception as e:
-            logger.error(f"Global Pipeline Fault: {e}")
+            logger.error(f"Execution Fault: {e}")
             st.error("I've encountered a temporary analytical hurdle. Please re-state your query or try selecting a different portfolio.")
-

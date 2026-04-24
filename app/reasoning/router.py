@@ -1,10 +1,10 @@
 import logging
 import os
-import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
+# Standardized Imports
 from app.utils.helpers import safe_slice, safe_float
 
-# Core Ingestion & Analytics
+# Analytical Components
 from app.ingestion.data_loader import DataLoader
 from app.analytics.market_intelligence import build_market_intelligence
 from app.analytics.portfolio_loader import load_portfolio
@@ -17,7 +17,7 @@ from app.analytics.sector_impact import compute_sector_impact
 from app.analytics.top_impact_sectors import get_top_impact_sectors
 from app.analytics.risk_detection import detect_concentration_risk
 
-# Reasoning Logic
+# Reasoning Components
 from app.reasoning.stock_impact_drilldown import get_stock_level_impact
 from app.reasoning.news_portfolio_link import link_news_to_portfolio
 from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
@@ -27,7 +27,6 @@ from app.reasoning.conflict_detector import detect_conflicts
 
 logger = logging.getLogger(__name__)
 
-# Global Singleton Loader
 _loader = DataLoader(os.path.join("data", "mock"))
 VALID_PORTFOLIOS = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
 
@@ -39,43 +38,35 @@ def build_safe_error_payload(tool_type: str) -> dict:
     }
 
 def get_portfolio_context_data(portfolio_id: str) -> dict:
-    # Fix 4: Invalid Portfolio Validation
-    if not isinstance(portfolio_id, str) or portfolio_id not in VALID_PORTFOLIOS:
-        if portfolio_id == "ALL_PORTFOLIOS": pass # Allowed for master view
-        else:
-            logger.warning(f"Invalid portfolio_id: {portfolio_id}, defaulting to PORTFOLIO_001")
-            portfolio_id = "PORTFOLIO_001"
+    # Portfolio Validation
+    if portfolio_id not in VALID_PORTFOLIOS:
+        portfolio_id = "PORTFOLIO_001"
 
     try:
         raw = load_portfolio(_loader, portfolio_id)
-        if not raw: return {"error": "no_data", "exposure": {}, "holdings_map": {}, "ranked_holdings": []}
+        if not raw: return {"error": "no_data"}
         
         norm_map = normalize_holdings(_loader, raw)
         exp = compute_sector_exposure(_loader, norm_map, raw)
         
         ranked_holdings = []
         for ticker, h_data in norm_map.items():
-            # Fix 6: Numeric Validation for Holdings
-            weight = h_data.get("weight", 0.0)
-            if not isinstance(weight, (int, float)): weight = safe_float(weight)
-            
             ranked_holdings.append({
                 "ticker": str(ticker), 
                 "sector": str(h_data.get("sector", "Unknown")),
-                "weight": weight,
+                "weight": safe_float(h_data.get("weight", 0.0)),
                 "daily_change": safe_float(h_data.get("day_change", 0.0))
             })
         ranked_holdings.sort(key=lambda x: x["weight"], reverse=True)
         
         return {"exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings, "portfolio_id": portfolio_id}
-    except Exception as e:
-        logger.error(f"Context error: {e}")
-        return {"error": "exception", "exposure": {}, "holdings_map": {}, "ranked_holdings": []}
+    except:
+        return {"error": "exception"}
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("reason")
-    p_id = ctx.get("portfolio_id", portfolio_id)
+    p_id = ctx["portfolio_id"]
 
     try:
         m_intel = build_market_intelligence(_loader)
@@ -102,7 +93,7 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except Exception:
+    except:
         return build_safe_error_payload("reason")
 
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
@@ -120,7 +111,7 @@ def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except Exception:
+    except:
         return build_safe_error_payload("risk")
 
 def run_full_analysis_wrapper(portfolio_id: str) -> Dict[str, Any]:
