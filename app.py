@@ -16,6 +16,7 @@ from app.reasoning.response_generator import stream_final_response
 from app.reasoning.response_polisher import polish_response
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
 from app.reasoning.proactive_engine import generate_proactive_insight
+from app.utils.helpers import safe_slice
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
