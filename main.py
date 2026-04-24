@@ -101,7 +101,7 @@ with st.sidebar:
         exposure = metrics.get("sector_exposure", {})
         if exposure:
             df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
-            df_exp["Allocation"] = df_exp["Allocation"].apply(safe_float)
+            df_exp["Allocation"] = df_exp["Allocation"].apply(lambda x: float(x) if x else 0)
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             # Fix 9: Streamlit stretch layout
