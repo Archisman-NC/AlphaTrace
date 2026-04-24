@@ -42,7 +42,7 @@ def _generate_base_response(client: Groq, prompt: str, system_msg: str) -> str:
 
 def generate_validated_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> str:
     """
-    CENTRAL WRAPER: Generates -> Evaluates -> Self-Corrects in a single production gated loop.
+    CENTRAL WRAPER: High-Fidelity Generation -> Evaluation -> Context-Aware Self-Correction.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -50,6 +50,7 @@ def generate_validated_response(user_query: str, intents: list, portfolio_id: st
         logger.error(f"Groq Init Failed: {e}")
         return "Synthesis engine is currently offline."
 
+    # Prepare complete input context
     synthesis_input = {
         "user_query": user_query,
         "tool_outputs": tool_outputs,
@@ -57,45 +58,77 @@ def generate_validated_response(user_query: str, intents: list, portfolio_id: st
     }
     user_msg = json.dumps(synthesis_input)
 
-    # 1. INITIAL GENERATION (Draft)
-    draft = _generate_base_response(client, user_msg, RESPONSE_SYSTEM_PROMPT)
+    # LANGFUSE TRACE INITIALIZATION
+    trace = None
+    if hasattr(langfuse, "trace"):
+        trace = langfuse.trace(name="validated_reasoning", metadata={"portfolio_id": portfolio_id})
 
-    # 2. EVALUATION
+    # 1. INITIAL GENERATION
+    start_time = time.time()
+    draft = _generate_base_response(client, user_msg, RESPONSE_SYSTEM_PROMPT)
+    initial_latency = time.time() - start_time
+
+    # 2. INITIAL EVALUATION
     # Pass draft to strict Llama judge
     eval_result = evaluate_explanation(draft, synthesis_input, portfolio_id)
-    score = eval_result.get("score", 0.0)
+    initial_score = eval_result.get("score", 0.0)
     
-    logger.info(f"[AUDITOR] Draft Score: {score}")
+    logger.info(f"[AUDITOR] Initial Score: {initial_score}")
 
-    # 3. SELF-CORRECTION (One Retry)
-    if score < 6.5: # Strict threshold for AlphaTrace
-        logger.info("TRIGGERING SELF-CORRECTION: Quality threshold breach.")
-        
-        correction_prompt = f"""
-        IMPROVE THIS ADVISORY. It was scored low ({score}/10) by our internal auditor.
-        REASON: {eval_result.get('reason', 'Too generic or missing tickers.')}
-        
-        REQUIRED IMPROVEMENTS:
-        - Mention specific tickers from tool_outputs (e.g. HDFCBANK, TCS).
-        - Include percentage performance changes.
-        - Link directly to the causal news trigger.
-        
-        PREVIOUS DRAFT: {draft}
-        """
-        
-        final_text = _generate_base_response(client, correction_prompt, RESPONSE_SYSTEM_PROMPT)
-        logger.info("[AUDITOR] Self-Correction Complete. Final response gated.")
-        return final_text
+    # OPTIMIZED EARLY EXIT: If score is high enough, don't regenerate
+    if initial_score >= 6.5:
+        if trace:
+            trace.generation(
+                name="reasoning_turn",
+                input=user_msg,
+                output=draft,
+                metadata={"initial_score": initial_score, "retry": False, "final_score": initial_score}
+            )
+            langfuse.flush()
+        return draft
 
-    return draft
+    # 3. CONTEXT-AWARE SELF-CORRECTION
+    logger.info(f"TRIGGERING SELF-CORRECTION: Quality {initial_score} below threshold.")
+    
+    # We pass the SAME DATA + instruction + previous failure to maintain context
+    correction_instruction = {
+        "instruction": "IMPROVE ADVISORY. Previous version was scored low by auditor.",
+        "auditor_feedback": eval_result.get("reason", "Missing specific tickers or quantification."),
+        "requirements": "Mention specific tickers (e.g. HDFCBANK), include %, and match causal trigger.",
+        "previous_draft": draft,
+        "original_data": synthesis_input # CRITICAL: Keep data in context
+    }
+    
+    start_time_retry = time.time()
+    final_text = _generate_base_response(client, json.dumps(correction_instruction), RESPONSE_SYSTEM_PROMPT)
+    retry_latency = time.time() - start_time_retry
+
+    # 4. FINAL EVALUATION (For metrics sanity)
+    final_eval = evaluate_explanation(final_text, synthesis_input, portfolio_id)
+    final_score = final_eval.get("score", 0.0)
+    logger.info(f"[AUDITOR] Final Score: {final_score}")
+
+    if trace:
+        trace.generation(
+            name="reasoning_turn_with_retry",
+            input=json.dumps(correction_instruction),
+            output=final_text,
+            metadata={
+                "initial_score": initial_score,
+                "retry": True,
+                "final_score": final_score,
+                "improvement": final_score - initial_score,
+                "total_latency": initial_latency + retry_latency
+            }
+        )
+        langfuse.flush()
+
+    return final_text
 
 def stream_final_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, memory_context: dict = None) -> Generator[str, None, None]:
     """
-    STREAMING COMPATIBILITY LAYER:
-    Generates validated response FIRST, then pipes tokens to UI at a natural cadence.
-    Ensures that "Typing UX" does NOT bypass the "Reasoning Evaluator".
+    Simulated Streaming for Validated Narratives.
     """
-    # Generate full validated text behind the scenes
     final_text = generate_validated_response(
         user_query=user_query,
         intents=intents,
@@ -104,9 +137,7 @@ def stream_final_response(user_query: str, intents: list, portfolio_id: str, too
         memory_context=memory_context
     )
 
-    # Break into tokens and yield for Streamlit st.write_stream
-    # We use a tiny sleep to simulate professional typing flow
     words = final_text.split(" ")
-    for i, word in enumerate(words):
+    for word in words:
         yield word + " "
-        time.sleep(0.01) # Professional cadence (approx 100-150 wpm UI feel)
+        time.sleep(0.01)
