@@ -16,8 +16,7 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
     """
     Advanced Proactive Engine:
     - Weighted Prioritization
-    - Severity Dynamics
-    - Memory Bridging
+    - Impact Injection ("Why this matters")
     - Anti-Template Generation
     """
     full_analysis = tool_data.get("full_analysis", {})
@@ -37,7 +36,8 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
                 "severity": severity,
                 "topic": f"concentration_{sector}",
                 "data": {"sector": sector, "alloc": alloc},
-                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%)."
+                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%).",
+                "impact": "This concentration increases your sensitivity to sector-specific volatility."
             })
 
     # 2. Divergence Check (Weight 2)
@@ -54,7 +54,8 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
                 "severity": severity,
                 "topic": f"divergence_{h.get('ticker')}",
                 "data": {"ticker": h.get("ticker"), "sector": h.get("sector")},
-                "msg": f"{h.get('ticker')} is decoupling from the {h.get('sector')} sector trends."
+                "msg": f"{h.get('ticker')} is decoupling from the {h.get('sector')} sector trends.",
+                "impact": "This divergence may indicate a fundamental shift or unique risk in this holding."
             })
 
     # 3. Conflict Check (Weight 2)
@@ -65,18 +66,17 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
             "weight": 2,
             "severity": "medium",
             "topic": "price_news_mismatch",
-            "msg": "I've detected a mismatch between positive sentiment and price action in some holdings."
+            "msg": "I've detected a mismatch between positive sentiment and price action in some holdings.",
+            "impact": "This conflict often signals hidden selling pressure or market skepticism."
         })
 
     if not potential_triggers:
         return None
 
     # FILTER & PRIORITIZE
-    # Filter out last topic to avoid repetition
     active_triggers = [t for t in potential_triggers if t["topic"] != last_topic]
     if not active_triggers: return None
 
-    # Sort by weight + severity (high adds 1 to weight)
     for t in active_triggers:
         t["score"] = t["weight"] + (1 if t["severity"] == "high" else 0)
     
@@ -87,20 +87,19 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
     icon = "⚠️" if selected["severity"] == "high" else "ℹ️"
     prefix = random.choice(PREFIXES)
     body = selected["msg"]
+    impact = selected["impact"]
     
     # MEMORY BRIDGING
     bridge = ""
     if session_memory and len(session_memory) > 0:
         last_turn = session_memory[-1]
-        # If new signal relates to last turn's intents or drivers, reference it
         if selected["type"] == "concentration" and selected["data"]["sector"] in [d.get("sector") for d in last_turn.get("drivers", [])]:
             bridge = f" This reinforces the {selected['data']['sector']} focus we analyzed earlier."
         elif selected["type"] == "divergence" and selected["data"]["ticker"] in last_turn.get("user_query", ""):
             bridge = " This adds context to the ticker move we were just looking at."
 
-    final_text = f"{icon} {prefix} {body}{bridge} Want a deep dive investigation?"
+    final_text = f"{icon} {prefix} {body} {impact}{bridge} Want a deep dive investigation?"
 
-    # FOLLOW-UP MAPPING
     follow_up_map = {
         "concentration": f"Analyze rebalancing for {selected['data'].get('sector')} heavy exposure",
         "divergence": f"Why is {selected['data'].get('ticker')} decoupling from {selected['data'].get('sector')}?",

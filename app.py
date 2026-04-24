@@ -46,32 +46,15 @@ if "proactive_metadata" not in st.session_state:
 if "last_insight_topic" not in st.session_state:
     st.session_state.last_insight_topic = None
 
+if "last_insight_turn" not in st.session_state:
+    st.session_state.last_insight_turn = -2 # Offset to allow first turn trigger
+
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
     "Priya Patel (Sector Concentrated)": "PORTFOLIO_002",
     "Arun Krishnamurthy (Conservative)": "PORTFOLIO_003",
     "Master View (Combined)": "ALL_PORTFOLIOS"
 }
-
-def get_portfolio_context(pid):
-    try:
-        with open("data/mock/portfolios.json", "r") as f:
-            data = json.load(f)
-            if pid == "ALL_PORTFOLIOS":
-                return {"risk_tolerance": "medium", "experience_level": "advanced", "name": "Master View"}
-            p = data["portfolios"].get(pid, {})
-            return {
-                "risk_tolerance": p.get("risk_profile", "medium").lower(),
-                "experience_level": "intermediate", 
-                "name": p.get("user_name", "User")
-            }
-    except Exception:
-        return {"risk_tolerance": "medium", "experience_level": "intermediate", "name": "User"}
-
-def interpret_conf(c):
-    if c > 0.8: return "High"
-    if c > 0.6: return "Moderate"
-    return "Low"
 
 # --- Sidebar: Hub ---
 with st.sidebar:
@@ -88,20 +71,18 @@ with st.sidebar:
         st.session_state.memory = []
         st.session_state.messages = []
         st.session_state.last_tool_data = None
-        st.session_state.last_insight_topic = None
-        st.rerun()
+        st.session_state.rerun()
 
     if st.session_state.last_tool_data:
         st.divider()
         data = st.session_state.last_tool_data
         full_analysis = data.get("full_analysis", {})
         conf = data.get("metrics", {}).get("confidence", 0.0)
-        st.metric("Reasoning Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
+        st.metric("Confidence", f"{conf:.2f}")
         st.progress(conf)
         
         exposure = full_analysis.get("sector_exposure", {})
         if exposure:
-            st.caption("Sector highlights")
             top_sector = max(exposure, key=exposure.get)
             st.write(f"**Top:** {top_sector}")
             df_exposure = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
@@ -117,13 +98,12 @@ for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         
-        # UI Button for Proactive Follow-up
+        # UI Button for Proactive Follow-up (Last turn focus)
         if message["role"] == "assistant" and i == len(st.session_state.messages) - 1 and st.session_state.proactive_metadata:
             meta = st.session_state.proactive_metadata
             if st.button(f"🔍 Analyze this signal: {meta['type'].title()}", key="proactive_btn"):
-                follow_up = meta['followup_query']
-                st.session_state.proactive_metadata = None # Consume
-                st.session_state.auto_prompt = follow_up
+                st.session_state.auto_prompt = meta['followup_query']
+                st.session_state.proactive_metadata = None 
                 st.rerun()
 
 # --- Auto Prompt Handling ---
@@ -131,7 +111,7 @@ if "auto_prompt" in st.session_state and st.session_state.auto_prompt:
     prompt = st.session_state.auto_prompt
     st.session_state.auto_prompt = None
 else:
-    prompt = st.chat_input("Ask AlphaTrace about your portfolio...")
+    prompt = st.chat_input("Ask AlphaTrace...")
 
 # --- Reasoning Cycle ---
 if prompt:
@@ -141,7 +121,8 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             # 1. ANALYTICAL PHASE
-            with st.spinner("Executing Intelligent Pipeline..."):
+            with st.spinner("Analyzing signals..."):
+                current_turn = len(st.session_state.memory)
                 recent_memory = st.session_state.memory[-3:]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_memory}
                 
@@ -150,7 +131,7 @@ if prompt:
                 validation = validate_and_route(resolution["resolved_query"], classification)
                 
                 if validation["action"] != "execute":
-                    st.markdown(f"Clarification: {validation.get('reason', 'I need more context.')}")
+                    st.markdown(f"Clarification: {validation.get('reason', 'Need more context.')}")
                 else:
                     execution_results = execute_intents({
                         "intent": validation["validated_intent"],
@@ -166,18 +147,21 @@ if prompt:
                         "metrics": {"confidence": validation["confidence"]},
                         "sector_exposure": tool_data.get("full_analysis", {}).get("sector_exposure", {})
                     }
-                    prof = get_portfolio_context(st.session_state.current_portfolio)
 
-                    # 3. ADVANCED PROACTIVE Hook
-                    proactive = generate_proactive_insight(
-                        tool_data, 
-                        prompt, 
-                        st.session_state.memory, 
-                        st.session_state.last_insight_topic
-                    )
-                    if proactive:
-                        st.session_state.proactive_metadata = proactive
-                        st.session_state.last_insight_topic = proactive["topic"]
+                    # 3. THROTTLED PROACTIVE ENGINE (2-Turn Cooldown)
+                    if (current_turn - st.session_state.last_insight_turn) >= 2:
+                        proactive = generate_proactive_insight(
+                            tool_data, 
+                            prompt, 
+                            st.session_state.memory, 
+                            st.session_state.last_insight_topic
+                        )
+                        if proactive:
+                            st.session_state.proactive_metadata = proactive
+                            st.session_state.last_insight_topic = proactive["topic"]
+                            st.session_state.last_insight_turn = current_turn
+                        else:
+                            st.session_state.proactive_metadata = None
                     else:
                         st.session_state.proactive_metadata = None
 
@@ -189,19 +173,18 @@ if prompt:
                     validation["validated_intent"],
                     execution_results["portfolio_id"],
                     tool_data,
-                    prof,
+                    {}, # Profile
                     memory_context=memory_ctx
                 )
                 
                 final_response = st.write_stream(stream_gen)
                 
-                # Append Advanced Proactive Insight
                 if st.session_state.proactive_metadata:
                     insight_block = f"\n\n{st.session_state.proactive_metadata['text']}"
                     st.markdown(insight_block)
                     final_response += insight_block
 
-                final_briefing = polish_response(final_response, validation["validated_intent"], prof, validation["confidence"])
+                final_briefing = polish_response(final_response, validation["validated_intent"], {}, validation["confidence"])
 
                 memory_turn = normalize_memory_turn(st.session_state.current_portfolio, prompt, validation["validated_intent"], final_briefing, tool_data)
                 st.session_state.memory.append(memory_turn)
@@ -210,4 +193,4 @@ if prompt:
 
         except Exception as e:
             logger.error(f"Execution Error: {e}")
-            st.error("Engine Timeout. Reconnecting...")
+            st.error("Engine Connectivity Error.")
