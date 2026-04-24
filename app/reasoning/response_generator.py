@@ -15,70 +15,55 @@ logger = logging.getLogger(__name__)
 RESPONSE_SYSTEM_PROMPT = """
 You are AlphaTrace, a financial AI copilot.
 
-Your job is to give clear, honest, and useful financial insights based on portfolio analysis.
-
 ## CORE PRINCIPLES:
-1. TRUTH OVER CONFIDENCE: If uncertain, say so. Do not pretend certainty.
-2. SPECIFIC > GENERIC: Use concrete reasons from tool_outputs. Avoid vague phrases.
-3. USER-AWARE: 
-   - Beginner: simpler explanations.
-   - Advanced: deeper reasoning.
-   - Low Risk: emphasize downside.
-   - High Risk: less cautious tone.
-4. SAFETY: Do NOT give absolute financial advice. Use "suggests", "might consider", etc.
+1. TRUTH OVER CONFIDENCE: If uncertain, say so.
+2. SPECIFIC > GENERIC: Use tool_outputs results.
+3. USER-AWARE: Adjust tone to risk/experience profile.
+4. MEMORY-PRIORITY: Use memory_context (past drivers/risks) to explain current shifts.
+   - Example: "Building on the [last driver] we discussed, we now see..."
 
 ## STYLE:
-- Conversational, direct, and jargon-free.
-- Structure: Direct Answer -> Explanation -> Risk Context -> Actionable Insight.
-- Length: 5-8 sentences max.
+- Conversational, direct, and structured.
+- Structure: Direct Answer -> Causal Explanation (linking memory) -> Actionable Insight.
+- Length: 5-8 sentences.
+
+PRIORITIZE memory_context (recent drivers/risks) when explaining the answer.
 """
 
-def generate_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None) -> str:
+def generate_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None, memory_context: dict = None) -> str:
     """
-    Synthesizes tool outputs into a cohesive, personalized advisory response.
+    Synthesizes narrative with Active Memory injection.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
-        logger.error(f"Failed to initialize Groq for response generation: {e}")
-        return "I'm sorry, I'm having trouble synthesizing the analysis results right now. Please try again in a moment."
-
-    # Default profile if none provided
-    if not user_profile:
-        user_profile = {"risk_tolerance": "medium", "experience_level": "intermediate"}
+        logger.error(f"Groq Init Failed: {e}")
+        return "Synthesis engine offline."
 
     synthesis_input = {
         "user_query": user_query,
         "intents": intents,
         "portfolio_id": portfolio_id,
         "tool_outputs": tool_outputs,
-        "user_profile": user_profile
+        "user_profile": user_profile or {},
+        "memory_context": memory_context or {} # Injected memory
     }
 
     start_time = time.time()
-    
     system_msg = RESPONSE_SYSTEM_PROMPT
     user_msg = json.dumps(synthesis_input)
     
     trace = None
     if hasattr(langfuse, "trace"):
-        trace = langfuse.trace(
-            name="response_generation",
-            metadata={"portfolio_id": portfolio_id, "stage": "generation", "user_persona": user_profile.get("experience_level")}
-        )
+        trace = langfuse.trace(name="response_generation", metadata={"stage": "generation"})
 
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg}
-            ],
+            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
             temperature=0.7,
             max_tokens=600
         )
-        
-        latency = time.time() - start_time
         output_text = response.choices[0].message.content.strip()
         
         if trace:
@@ -87,42 +72,32 @@ def generate_advisory_response(user_query: str, intents: list, portfolio_id: str
                 input={"system": system_msg, "user": user_msg},
                 output=output_text,
                 model="llama-3.3-70b-versatile",
-                usage={
-                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
-                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
-                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
-                },
-                metadata={"latency": latency}
+                metadata={"latency": time.time() - start_time}
             )
             langfuse.flush()
-            
         return output_text
     except Exception as e:
-        logger.error(f"Response generation failed: {e}")
-        return "The analysis is complete, but I'm unable to generate a narrative briefing at this time."
+        logger.error(f"Generation failed: {e}")
+        return "I encountered an error synthesizing the temporal context."
 
-def stream_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None) -> Generator[str, None, None]:
+def stream_advisory_response(user_query: str, intents: list, portfolio_id: str, tool_outputs: dict, user_profile: dict = None, memory_context: dict = None) -> Generator[str, None, None]:
     """
-    Streaming version of the narrative synthesis.
-    Yields tokens from Groq in real-time.
+    Streaming narrative synthesis with Active Memory.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
         logger.error(f"Streaming Init Failed: {e}")
-        yield "I'm sorry, I'm having trouble connecting right now."
+        yield "Synthesis engine offline."
         return
-
-    # Default profile
-    if not user_profile:
-        user_profile = {"risk_tolerance": "medium", "experience_level": "intermediate"}
 
     synthesis_input = {
         "user_query": user_query,
         "intents": intents,
         "portfolio_id": portfolio_id,
         "tool_outputs": tool_outputs,
-        "user_profile": user_profile
+        "user_profile": user_profile or {},
+        "memory_context": memory_context or {}
     }
 
     start_time = time.time()
@@ -131,18 +106,12 @@ def stream_advisory_response(user_query: str, intents: list, portfolio_id: str, 
     
     trace = None
     if hasattr(langfuse, "trace"):
-        trace = langfuse.trace(
-            name="response_streaming",
-            metadata={"portfolio_id": portfolio_id, "stage": "generation", "user_persona": user_profile.get("experience_level")}
-        )
+        trace = langfuse.trace(name="response_streaming", metadata={"stage": "generation"})
 
     try:
         stream = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg}
-            ],
+            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
             temperature=0.7,
             max_tokens=600,
             stream=True
@@ -155,17 +124,16 @@ def stream_advisory_response(user_query: str, intents: list, portfolio_id: str, 
                 full_response += token
                 yield token
         
-        latency = time.time() - start_time
         if trace:
             trace.generation(
                 name="streaming_call",
                 input={"system": system_msg, "user": user_msg},
                 output=full_response,
                 model="llama-3.3-70b-versatile",
-                metadata={"latency": latency}
+                metadata={"latency": time.time() - start_time}
             )
             langfuse.flush()
-
     except Exception as e:
         logger.error(f"Streaming failed: {e}")
-        yield "The analysis is complete, but I encountered an error during terminal briefing."
+        yield "Connection timeout during temporal briefing."
+        return
