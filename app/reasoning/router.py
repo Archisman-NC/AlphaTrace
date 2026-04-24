@@ -34,7 +34,7 @@ def build_error_payload(tool_type: str, error: Exception) -> dict:
     return {
         "type": tool_type,
         "status": "error",
-        "summary": "Analytical failure.",
+        "summary": f"Analytical failure in {tool_type}.",
         "drivers": [], "risks": [], "metrics": {"error": str(error)}
     }
 
@@ -43,10 +43,28 @@ def get_portfolio_context_data(portfolio_id: str) -> dict:
     """Computes the base identity of the portfolio for visual consistency."""
     try:
         raw = load_portfolio(_loader, portfolio_id)
-        norm = normalize_holdings(_loader, raw)
-        exp = compute_sector_exposure(_loader, norm, raw)
-        return {"exposure": exp, "holdings": norm}
-    except: return {"exposure": {}, "holdings": []}
+        norm_map = normalize_holdings(_loader, raw)
+        exp = compute_sector_exposure(_loader, norm_map, raw)
+        
+        # CONVERT DICT TO RANKED LIST FOR SLICING
+        ranked_holdings = []
+        for ticker, h_data in norm_map.items():
+            ranked_holdings.append({
+                "ticker": ticker,
+                "sector": h_data.get("sector"),
+                "weight": h_data.get("weight"),
+                "daily_change": h_data.get("day_change", 0.0)
+            })
+        ranked_holdings.sort(key=lambda x: x["weight"], reverse=True)
+        
+        return {
+            "exposure": exp, 
+            "holdings_map": norm_map,
+            "ranked_holdings": ranked_holdings
+        }
+    except Exception as e:
+        logger.error(f"Context data failure: {e}")
+        return {"exposure": {}, "holdings_map": {}, "ranked_holdings": []}
 
 # --- ENRICHED PRODUCTION WRAPPERS ---
 
@@ -54,18 +72,16 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     try:
         m_intel = build_market_intelligence(_loader)
         ctx = get_portfolio_context_data(portfolio_id)
-        exposure = ctx["exposure"]
-        normalized_holdings = ctx["holdings"]
         
-        stock_map = build_stock_exposure_map(normalized_holdings, {}) 
-        linked_trends = link_portfolio_to_sector_trends(exposure, m_intel["sector_trends"])
+        stock_map = build_stock_exposure_map(ctx["holdings_map"], {}) 
+        linked_trends = link_portfolio_to_sector_trends(ctx["exposure"], m_intel["sector_trends"])
         impacts = compute_sector_impact(linked_trends)
         top_impacts = get_top_impact_sectors(impacts, top_n=3)
         stock_drivers = get_stock_level_impact(top_impacts, stock_map)
 
-        relevant_news = link_news_to_portfolio(m_intel["filtered_news"], exposure, stock_map)
+        relevant_news = link_news_to_portfolio(m_intel["filtered_news"], ctx["exposure"], stock_map)
         enriched_news = attach_sector_trends_to_news(relevant_news, m_intel["sector_trends"])
-        personalized_news = attach_portfolio_exposure(enriched_news, exposure)
+        personalized_news = attach_portfolio_exposure(enriched_news, ctx["exposure"])
         
         chains = build_causal_chains(personalized_news, impacts, stock_drivers)
         conflicts = detect_conflicts(chains)
@@ -73,13 +89,13 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return {
             "type": "reason",
             "status": "success",
-            "summary": f"Reasoning analysis complete for {portfolio_id}.",
+            "summary": f"Causal analysis complete for {portfolio_id}.",
             "drivers": chains, "risks": conflicts,
             "metrics": {
                 "chain_count": len(chains),
                 "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"]),
-                "sector_exposure": exposure, # PERSIST FOR UI
-                "ranked_holdings": normalized_holdings
+                "sector_exposure": ctx["exposure"],
+                "ranked_holdings": ctx["ranked_holdings"] # LIST
             }
         }
     except Exception as e:
@@ -88,8 +104,7 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     try:
         ctx = get_portfolio_context_data(portfolio_id)
-        exposure = ctx["exposure"]
-        risks = detect_concentration_risk(exposure)
+        risks = detect_concentration_risk(ctx["exposure"])
 
         return {
             "type": "risk",
@@ -98,8 +113,8 @@ def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
             "drivers": [], "risks": risks,
             "metrics": {
                 "risk_count": len(risks),
-                "sector_exposure": exposure, 
-                "ranked_holdings": ctx["holdings"]
+                "sector_exposure": ctx["exposure"], 
+                "ranked_holdings": ctx["ranked_holdings"] # LIST
             }
         }
     except Exception as e:
@@ -128,7 +143,7 @@ def switch_portfolio_wrapper(portfolio_id: str) -> Dict[str, Any]:
         "drivers": [], "risks": [], "metrics": {
             "portfolio_id": portfolio_id,
             "sector_exposure": ctx["exposure"],
-            "ranked_holdings": ctx["holdings"]
+            "ranked_holdings": ctx["ranked_holdings"]
         }
     }
 
