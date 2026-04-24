@@ -35,6 +35,7 @@ if "last_tool_data" not in st.session_state: st.session_state.last_tool_data = N
 if "proactive_metadata" not in st.session_state: st.session_state.proactive_metadata = None
 if "last_insight_topic" not in st.session_state: st.session_state.last_insight_topic = None
 if "last_insight_turn" not in st.session_state: st.session_state.last_insight_turn = -2
+if "pending_prompt" not in st.session_state: st.session_state.pending_prompt = None
 
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
@@ -68,11 +69,9 @@ with st.sidebar:
     if st.session_state.last_tool_data:
         st.divider()
         data = st.session_state.last_tool_data
-        
-        # Pull enriched metrics from across tool results
         metrics = {}
         for tool_type, tool_res in data.items():
-            metrics.update(tool_res.get("metrics", {}))
+            if isinstance(tool_res, dict): metrics.update(tool_res.get("metrics", {}))
         
         conf = data.get("global_metrics", {}).get("confidence", 0.0)
         st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
@@ -82,7 +81,6 @@ with st.sidebar:
         if exposure:
             st.caption("Sector highlights")
             df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
-            # Remove non-numeric values for pie chart
             df_exp = df_exp[df_exp['Allocation'].apply(lambda x: isinstance(x, (int, float)))]
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
@@ -96,21 +94,21 @@ for i, message in enumerate(st.session_state.messages):
             meta = st.session_state.proactive_metadata
             if st.button(f"🔍 Analyze this signal: {meta['type'].title()}", key="proactive_btn"):
                 st.session_state.last_insight_turn = len(st.session_state.memory)
-                st.session_state.auto_prompt = meta['followup_query']
+                st.session_state.pending_prompt = meta['followup_query']
                 st.session_state.proactive_metadata = None 
                 st.rerun()
 
-# --- Auto Prompt Handling ---
-if "auto_prompt" in st.session_state and st.session_state.auto_prompt:
-    prompt = st.session_state.auto_prompt
-    st.session_state.auto_prompt = None
-else:
-    prompt = st.chat_input("Analyze portfolio...")
+# --- Input Handling & Echo ---
+user_input = st.chat_input("Analyze portfolio...")
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.pending_prompt = user_input
+    st.rerun()
 
-# --- Reasoning Cycle ---
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    if not hasattr(st.session_state, "auto_prompt"): st.rerun()
+# --- Reasoning Execution (Persists across reruns) ---
+if st.session_state.pending_prompt:
+    active_prompt = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None # Consume it
 
     with st.chat_message("assistant"):
         try:
@@ -120,12 +118,14 @@ if prompt:
                 recent_mem = st.session_state.memory[-3:]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                 
-                resolution = resolve_context(prompt, session_wrapped)
+                resolution = resolve_context(active_prompt, session_wrapped)
                 classification = classify_intent(resolution["resolved_query"], resolution["portfolio_id"], recent_mem)
                 validation = validate_and_route(resolution["resolved_query"], classification)
                 
                 if validation["action"] != "execute":
-                    st.markdown(f"Clarification: {validation.get('reason', 'Need context.')}")
+                    res_path = f"Clarification: {validation.get('reason', 'Need context.')}"
+                    st.markdown(res_path)
+                    st.session_state.messages.append({"role": "assistant", "content": res_path})
                 else:
                     execution_results = execute_intents({
                         "intent": validation["validated_intent"],
@@ -134,16 +134,13 @@ if prompt:
                     }, {"current_portfolio": st.session_state.current_portfolio})
                     
                     st.session_state.current_portfolio = execution_results["portfolio_id"]
-                    
-                    # STANDARDIZED DATA AGGREGATION
                     tool_data = {res["type"]: res for res in execution_results["results"]}
                     tool_data["global_metrics"] = {"confidence": validation["confidence"]}
-                    
                     st.session_state.last_tool_data = tool_data
 
-                    # PROACTIVE ENGINE (Throttled & Standardized)
+                    # PROACTIVE ENGINE
                     if (current_turn - st.session_state.last_insight_turn) >= 2:
-                        proactive = generate_proactive_insight(tool_data, prompt, st.session_state.memory, st.session_state.last_insight_topic)
+                        proactive = generate_proactive_insight(tool_data, active_prompt, st.session_state.memory, st.session_state.last_insight_topic)
                         if proactive:
                             st.session_state.proactive_metadata = proactive
                             st.session_state.last_insight_topic = proactive["topic"]
@@ -151,32 +148,32 @@ if prompt:
                         else: st.session_state.proactive_metadata = None
                     else: st.session_state.proactive_metadata = None
 
-            # 2. NARRATIVE PHASE (Gated)
-            if validation["action"] == "execute":
-                memory_ctx = extract_relevant_memory(prompt, st.session_state.memory)
-                
-                stream_gen = stream_final_response(
-                    user_query=resolution["resolved_query"],
-                    intents=validation["validated_intent"],
-                    portfolio_id=execution_results["portfolio_id"],
-                    tool_outputs=tool_data,
-                    memory_context=memory_ctx
-                )
-                
-                final_res = st.write_stream(stream_gen)
-                
-                if st.session_state.proactive_metadata:
-                    insight_text = f"\n\n{st.session_state.proactive_metadata['text']}"
-                    st.markdown(insight_text)
-                    final_res += insight_text
+                    # 2. NARRATIVE PHASE
+                    memory_ctx = extract_relevant_memory(active_prompt, st.session_state.memory)
+                    
+                    stream_gen = stream_final_response(
+                        user_query=resolution["resolved_query"],
+                        intents=validation["validated_intent"],
+                        portfolio_id=execution_results["portfolio_id"],
+                        tool_outputs=tool_data,
+                        memory_context=memory_ctx
+                    )
+                    
+                    final_res = st.write_stream(stream_gen)
+                    
+                    if st.session_state.proactive_metadata:
+                        insight_text = f"\n\n{st.session_state.proactive_metadata['text']}"
+                        st.markdown(insight_text)
+                        final_res += insight_text
 
-                final_brief = polish_response(final_res, validation["validated_intent"], {}, validation["confidence"])
+                    final_brief = polish_response(final_res, validation["validated_intent"], {}, validation["confidence"])
 
-                memory_obj = normalize_memory_turn(st.session_state.current_portfolio, prompt, validation["validated_intent"], final_brief, tool_data)
-                st.session_state.memory.append(memory_obj)
-                st.session_state.messages.append({"role": "assistant", "content": final_brief})
-                st.rerun()
+                    # Persist Memory
+                    memory_obj = normalize_memory_turn(st.session_state.current_portfolio, active_prompt, validation["validated_intent"], final_brief, tool_data)
+                    st.session_state.memory.append(memory_obj)
+                    st.session_state.messages.append({"role": "assistant", "content": final_brief})
+                    st.rerun()
 
         except Exception as e:
             logger.error(f"Execution Error: {e}")
-            st.error("Engine Fault. Re-initializing...")
+            st.error("Engine Fault. Please retry.")
