@@ -1,15 +1,6 @@
 import time
 from typing import List, Dict, Any, Optional
-try:
-    from app.utils.helpers import safe_slice
-except Exception:
-    def safe_slice(x, n=3):
-        try:
-            if isinstance(x, list):
-                return x[:n]
-            return x
-        except Exception:
-            return x
+from app.utils.helpers import safe_slice
 
 def normalize_memory_turn(
     portfolio_id: str,

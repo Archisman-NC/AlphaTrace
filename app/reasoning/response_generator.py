@@ -7,16 +7,7 @@ from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
 from app.utils.helpers import langfuse
-try:
-    from app.utils.helpers import safe_slice
-except Exception:
-    def safe_slice(x, n=3):
-        try:
-            if isinstance(x, list):
-                return x[:n]
-            return x
-        except Exception:
-            return x
+from app.utils.helpers import safe_slice
 
 # --- DYNAMIC EVALUATOR LOADER ---
 try:

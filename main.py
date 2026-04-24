@@ -9,9 +9,10 @@ from dotenv import load_dotenv
 # --- Namespace Integrity Check ---
 try:
     import app
+    from app.utils.helpers import safe_slice
     print(f"[BOOT] Package 'app' resolved to: {app.__file__}")
 except Exception as e:
-    print(f"[BOOT_ERROR] Package resolution failed: {e}")
+    print(f"[CRITICAL] AlphaTrace structural failure: {e}")
 
 # --- Global Import Shield ---
 try:
