@@ -6,8 +6,17 @@ import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 
-# Standardized Imports
-from app.utils.helpers import safe_slice, safe_float
+# --- Structural Failsafe Imports ---
+try:
+    from app.utils.helpers import safe_slice, safe_float
+except Exception:
+    def safe_slice(x, k=3, reverse=False): 
+        if not isinstance(x, list): return []
+        return x[-k:] if reverse else x[:k]
+    def safe_float(x): 
+        try: return float(x)
+        except: return 0.0
+
 from app.reasoning.context_resolver import resolve_context
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route

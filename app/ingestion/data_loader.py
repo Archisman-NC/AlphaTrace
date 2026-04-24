@@ -4,6 +4,7 @@ import logging
 from typing import List, Any, Type, TypeVar
 from app.utils.schemas import StockData, NewsItem, PortfolioItem
 from pydantic import BaseModel, ValidationError
+from app.utils.helpers import build_stock_to_sector_map
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +114,8 @@ class DataLoader:
         self.mutual_funds = _load_raw("mutual_funds.json")
         self.sector_mapping = _load_raw("sector_mapping.json")
         
-        # Instantiate normalized map once for structural use universally 
-        self.stock_to_sector = build_stock_to_sector_map(self.sector_mapping)
+        # FIX 6: Harden registry with Omni-Gated Mapper
+        self.stock_to_sector = build_stock_to_sector_map(self.sector_mapping or {})
         
     def get_market_data(self) -> dict:
         return {

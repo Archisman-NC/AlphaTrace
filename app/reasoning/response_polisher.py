@@ -5,26 +5,33 @@ from app.utils.helpers import langfuse
 
 logger = logging.getLogger(__name__)
 
+# Initialize client properly
+api_key = os.getenv("OPENAI_API_KEY")
+client = None
+if api_key:
+    try:
+        client = OpenAI(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        client = None
+
 def polish_response(raw_text: str, intents: list, context: dict, confidence: float) -> str:
     """
-    Polishes the raw reasoning output into a professional, institutional-grade advisor tone.
+    Polishes the raw reasoning output into a professional advisor tone.
+    Guaranteed to return at least the raw_text.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        logger.warning("OPENAI_API_KEY missing - skipping polishing phase.")
+    if not client:
         return raw_text
 
     try:
-        client = OpenAI(api_key=api_key)
-        
         system_prompt = """
-        You are a senior financial advisor polisher. 
-        Take the provided raw reasoning and ensure:
-        1. Professional and institutional tone (no chatty filler).
+        You are a senior financial advisor polisher for AlphaTrace. 
+        Take the PROVIDED raw reasoning and ensure:
+        1. Professional, institutional tone.
         2. High-precision numeric focus.
-        3. Clear structure (Summary, Risks, Metrics).
+        3. Clear structure.
         
-        STRICT: Do NOT add new facts. ONLY refine the existing text.
+        STRICT: Do NOT invent new facts. ONLY refine the existing narrative.
         """
         
         response = client.chat.completions.create(
@@ -35,8 +42,8 @@ def polish_response(raw_text: str, intents: list, context: dict, confidence: flo
             ],
             temperature=0.1
         )
-        return response.choices[0].message.content
+        return str(response.choices[0].message.content)
         
     except Exception as e:
-        logger.error(f"Polishing phase failed: {e}")
+        logger.error(f"Polishing execution fault: {e}")
         return raw_text
