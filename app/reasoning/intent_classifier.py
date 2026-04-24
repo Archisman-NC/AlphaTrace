@@ -11,52 +11,33 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-CLASSIFICATION_SYSTEM_PROMPT = """
+CLASSIFIER_SYSTEM_PROMPT = """
 You are a high-precision financial intent classification engine.
-
-Return STRICT JSON. No explanation.
+Use structured memory to disambiguate user queries and resolve portfolio context.
 
 ## INPUT:
-- user_query
-- current_portfolio
-- chat_history
+- user_query: current user input
+- current_portfolio: active selection
+- memory: list of structured past turns (intents, summary, drivers, risks)
 
 ## OUTPUT FORMAT (STRICT):
 {
   "intent": ["full_analysis", "reason", "risk", "switch_portfolio"],
   "portfolio_id": "PORTFOLIO_XXX",
-  "confidence": 0.0 
+  "confidence": float 
 }
-*Note: The confidence score must be a dynamic float between 0.0 and 1.0 based on query clarity.*
 
 ## RULES:
-1. Detect ALL relevant intents.
-2. Use chat_history to resolve references.
-3. Portfolio handling: resolve or use current_portfolio.
-4. CONFIDENCE SCORING:
-   - 0.9-1.0: extremely clear
-   - 0.7-0.89: moderate/good
-   - 0.5-0.69: ambiguous
-   - <0.5: very weak
-
-5. Edge handling:
-   - vague query → ["full_analysis"]
-   - "why" → include "reason"
-   - "safe/risk/downside" → include "risk"
-   - "switch/change" → include "switch_portfolio"
-
-## STRICT:
-- Must return valid JSON
-- No extra keys
-- No missing fields
+1. If query is a follow-up (e.g. "why?"), infer the intent from the previous memory turns.
+2. If query mentions "risk/safe/danger", include "risk".
+3. Use memory to detect if the user's "this" refers to a specific stock/sector from last turn.
 """
 
-def classify_intent(query: str, current_portfolio: str, chat_history: list = None) -> dict:
+def classify_intent(query: str, current_portfolio: str, memory: list = None) -> dict:
     """
-    High-precision classification:
-    - Supports multi-intent detection
-    - Includes confidence scoring
-    - Resolves portfolio_id from context
+    High-precision classification utilizing structured memory.
+    - Disambiguates vague queries using past intents/drivers.
+    - Resolves portfolio_id from continuity context.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -68,12 +49,12 @@ def classify_intent(query: str, current_portfolio: str, chat_history: list = Non
     classification_input = {
         "user_query": query,
         "current_portfolio": current_portfolio,
-        "chat_history": chat_history[-5:] if chat_history else []
+        "memory": memory[-3:] if memory else [] # Only last few turns to avoid noise
     }
 
     start_time = time.time()
     
-    system_msg = CLASSIFICATION_SYSTEM_PROMPT
+    system_msg = CLASSIFIER_SYSTEM_PROMPT
     user_msg = json.dumps(classification_input)
     
     trace = None
@@ -115,21 +96,17 @@ def classify_intent(query: str, current_portfolio: str, chat_history: list = Non
         result = json.loads(output_text)
         
         # NORMALIZE SCHEMA
-        # 1. Handle plural 'intents' key if model provides it
         if "intents" in result and "intent" not in result:
             result["intent"] = result.pop("intents")
         
-        # 2. Ensure intent is always a list
         if isinstance(result.get("intent"), str):
             result["intent"] = [result["intent"]]
         elif "intent" not in result:
             result["intent"] = ["full_analysis"]
 
-        # 3. Ensure portfolio_id exists
         if "portfolio_id" not in result:
             result["portfolio_id"] = current_portfolio
             
-        # 4. Ensure confidence exists
         if "confidence" not in result:
             result["confidence"] = 0.5
             
