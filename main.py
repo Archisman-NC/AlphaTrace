@@ -16,7 +16,6 @@ from app.utils.helpers import safe_float
 # --- Namespace Integrity Check ---
 try:
     import app
-    from app.utils.helpers import safe_slice
     print(f"[BOOT] Package 'app' resolved to: {app.__file__}")
 except Exception as e:
     print(f"[CRITICAL] AlphaTrace structural failure: {e}")

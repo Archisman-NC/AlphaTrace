@@ -7,7 +7,6 @@ from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
 from app.utils.helpers import langfuse
-from app.utils.helpers import safe_slice
 
 # --- DYNAMIC EVALUATOR LOADER ---
 try:
