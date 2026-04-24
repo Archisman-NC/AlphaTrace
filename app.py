@@ -12,7 +12,7 @@ from app.reasoning.context_resolver import resolve_context
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route
 from app.reasoning.router import execute_intents
-from app.reasoning.response_generator import stream_final_response # GATED UPGRADE
+from app.reasoning.response_generator import stream_final_response
 from app.reasoning.response_polisher import polish_response
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
 from app.reasoning.proactive_engine import generate_proactive_insight
@@ -68,14 +68,22 @@ with st.sidebar:
     if st.session_state.last_tool_data:
         st.divider()
         data = st.session_state.last_tool_data
-        full_analysis = data.get("full_analysis", {})
-        conf = data.get("metrics", {}).get("confidence", 0.0)
+        
+        # Pull enriched metrics from across tool results
+        metrics = {}
+        for tool_type, tool_res in data.items():
+            metrics.update(tool_res.get("metrics", {}))
+        
+        conf = data.get("global_metrics", {}).get("confidence", 0.0)
         st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
         st.progress(conf)
         
-        exposure = full_analysis.get("sector_exposure", {})
+        exposure = metrics.get("sector_exposure", {})
         if exposure:
+            st.caption("Sector highlights")
             df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
+            # Remove non-numeric values for pie chart
+            df_exp = df_exp[df_exp['Allocation'].apply(lambda x: isinstance(x, (int, float)))]
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
@@ -92,13 +100,14 @@ for i, message in enumerate(st.session_state.messages):
                 st.session_state.proactive_metadata = None 
                 st.rerun()
 
-# --- Reasoning Cycle ---
+# --- Auto Prompt Handling ---
 if "auto_prompt" in st.session_state and st.session_state.auto_prompt:
     prompt = st.session_state.auto_prompt
     st.session_state.auto_prompt = None
 else:
     prompt = st.chat_input("Analyze portfolio...")
 
+# --- Reasoning Cycle ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     if not hasattr(st.session_state, "auto_prompt"): st.rerun()
@@ -106,7 +115,7 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             # 1. ANALYTICAL PHASE
-            with st.spinner("Executing Gated Pipeline..."):
+            with st.spinner("Executing Intelligence pipeline..."):
                 current_turn = len(st.session_state.memory)
                 recent_mem = st.session_state.memory[-3:]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
@@ -125,15 +134,14 @@ if prompt:
                     }, {"current_portfolio": st.session_state.current_portfolio})
                     
                     st.session_state.current_portfolio = execution_results["portfolio_id"]
-                    tool_data = {res["type"]: res["data"] for res in execution_results["results"]}
                     
-                    st.session_state.last_tool_data = {
-                        "full_analysis": tool_data.get("full_analysis", {}),
-                        "metrics": {"confidence": validation["confidence"]},
-                        "sector_exposure": tool_data.get("full_analysis", {}).get("sector_exposure", {})
-                    }
+                    # STANDARDIZED DATA AGGREGATION
+                    tool_data = {res["type"]: res for res in execution_results["results"]}
+                    tool_data["global_metrics"] = {"confidence": validation["confidence"]}
+                    
+                    st.session_state.last_tool_data = tool_data
 
-                    # PROACTIVE Hook
+                    # PROACTIVE ENGINE (Throttled & Standardized)
                     if (current_turn - st.session_state.last_insight_turn) >= 2:
                         proactive = generate_proactive_insight(tool_data, prompt, st.session_state.memory, st.session_state.last_insight_topic)
                         if proactive:
@@ -143,11 +151,10 @@ if prompt:
                         else: st.session_state.proactive_metadata = None
                     else: st.session_state.proactive_metadata = None
 
-            # 2. NARRATIVE PHASE (Gated & Self-Corrected)
+            # 2. NARRATIVE PHASE (Gated)
             if validation["action"] == "execute":
                 memory_ctx = extract_relevant_memory(prompt, st.session_state.memory)
                 
-                # ENFORCED EVALUATION: generate full text, evaluate, THEN stream
                 stream_gen = stream_final_response(
                     user_query=resolution["resolved_query"],
                     intents=validation["validated_intent"],
@@ -163,10 +170,8 @@ if prompt:
                     st.markdown(insight_text)
                     final_res += insight_text
 
-                # Background polish
                 final_brief = polish_response(final_res, validation["validated_intent"], {}, validation["confidence"])
 
-                # Persist Memory
                 memory_obj = normalize_memory_turn(st.session_state.current_portfolio, prompt, validation["validated_intent"], final_brief, tool_data)
                 st.session_state.memory.append(memory_obj)
                 st.session_state.messages.append({"role": "assistant", "content": final_brief})
@@ -174,4 +179,4 @@ if prompt:
 
         except Exception as e:
             logger.error(f"Execution Error: {e}")
-            st.error("Gated Engine Connectivity Error.")
+            st.error("Engine Fault. Re-initializing...")
