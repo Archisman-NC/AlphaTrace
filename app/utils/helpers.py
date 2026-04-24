@@ -17,13 +17,13 @@ def safe_float(x):
         return 0.0
 
 
-def safe_slice(x, n=3, k=None):
+def safe_slice(x, n=3, **kwargs):
     """
-    Safe slicing utility.
-    Supports both n and legacy k argument.
+    Omni-Argument slicing utility.
+    Ingests and safely ignores inconsistent kwargs (k, reverse, etc.)
     """
-    if k is not None:
-        n = k
+    if "k" in kwargs:
+        n = kwargs["k"]
 
     try:
         if isinstance(x, list):
