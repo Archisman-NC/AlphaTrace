@@ -1,186 +1,94 @@
----
-title: AlphaTrace
-emoji: 📊
-colorFrom: blue
-colorTo: indigo
-sdk: streamlit
-app_file: app.py
-python_version: 3.12
-pinned: false
----
+# AlphaTrace 📈
+### **Autonomous Financial Reasoning & Monitoring Copilot**
 
-# Autonomous Financial Reasoning Engine
+AlphaTrace is a production-grade AI financial advisor designed to move beyond simple chat. It executes 
+**deterministic causal reasoning** to link global market signals directly to portfolio impact.
 
-### Explain portfolio movement using causal AI + deterministic pipelines
-
-[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/ArchismanNC/AlphaTrace)
-[![Loom Walkthrough](https://img.shields.io/badge/Loom-Video_Walkthrough-9626ed?logo=loom)](https://www.loom.com/share/e092ee2319b744ff8110d156c3ea5307)
-
-*Note: The metadata block at the top of this file is used for automated deployment to Hugging Face Spaces.*
+[**🌐 Live Demo**](https://alphatrace.streamlit.app/) | [**📊 Architecture Documentation**](#architecture)
 
 ---
 
-## Overview
+## **The AlphaTrace Difference**
+Most AI financial tools are just wrappers around LLMs. AlphaTrace is a **reasoning engine**.
 
-The Autonomous Financial Reasoning Engine is a production-grade causal financial reasoning system designed to bridge the gap between raw market signals and human-readable insights. By synthesizing market data, financial news, and individual portfolio holdings, the system identifies not just *what* happened to a portfolio, but explains *why* it moved. It constructs verifiable reasoning chains that link macroeconomic triggers to sector-level impacts and granular stock performance.
-
----
-
-## Architecture
-
-The system follows a strict multi-stage pipeline architecture to ensure data integrity and reasoning accuracy:
-
-```text
-Market Data + News + Portfolio Holdings
-↓
-Phase 1: Market Intelligence (Signal Extraction & Categorization)
-↓
-Phase 2: Portfolio Intelligence (Exposure Calculation & Metric Normalization)
-↓
-Phase 3: Reasoning Engine (Causal Chain Construction & Conflict Detection)
-↓
-Outcome: Structured Explanation + AI Judge Evaluation + Confidence Scoring
-```
+*   **Deterministic Chains**: Links Macro News → Sector Trends → Stock Performance → Portfolio Impact.
+*   **Proactive Monitoring**: An autonomous "Active Lookout" (Astor-style) that flags concentration risks and asset-sector divergence without being asked.
+*   **Hybrid Intelligence**: Orchestrates Groq (Ultra-low latency reasoning) and OpenAI (Premium narrative synthesis).
+*   **Self-Correction**: An internal "Auditor" grades every response on ticker accuracy and causal integrity, triggering a re-generation if quality falls below 6.0/10.
 
 ---
 
-## How It Works
-
-The engine operates on a strict causal chain model:
-**News → Sector → Stock → Portfolio**
-
-* **Trigger Identification**: The system ingests financial news and identifies macroeconomic or regulatory triggers.
-* **Sector Propagation**: Mapping news impact to specific industry sectors (e.g., Banking, IT, Energy).
-* **Security Linkage**: Attributing sector-level sentiment to individual stock tickers based on correlation and exposure.
-* **Portfolio Attribution**: Aggregating security-level performance into total portfolio daily change and risk metrics.
+## **Core Capabilities**
+*   **Multi-Intent Reasoning**: Context-aware understanding of "Why", "Risk", and "Full Analysis" queries.
+*   **Proactive Insights**: Autonomous signal detection with interactive follow-up hooks.
+*   **Memory-Aware**: High-fidelity structured memory system for multi-turn temporal analysis.
+*   **Visual Dashboard**: Real-time Plotly sector analytics and styled risk-performance tables.
+*   **Observability**: Full-stack Langfuse instrumentation for tracing, latency monitoring, and quality scoring.
 
 ---
 
-## Key Features
+## **Architecture Overview**
+AlphaTrace utilizes a modular 8-phase reasoning pipeline:
 
-* **Deterministic Reasoning Pipeline**: Core computations and causal linking are handled via pure logic to eliminate LLM hallucinations.
-* **Sector-Level Impact Analysis**: Quantitative calculation of sector contribution to total portfolio variance.
-* **Conflict Detection**: Automated identification of diverging signals where sectoral trends and security performance disagree.
-* **Groq-Powered Explanations**: Uses Llama-3.3-70b via Groq for high-latency, low-cost narrative synthesis.
-* **Hybrid Evaluation Layer**: Combines an LLM-as-a-Judge with a deterministic rule-check layer for structural validation.
-* **Quantitative Confidence Scoring**: Multi-factor confidence calculation based on signal strength and data completeness.
-* **Observability Integration**: Full lifecycle tracing of LLM interactions using Langfuse.
-
----
-
-## Sample Output
-
-```text
-[FINAL ADVISORY EXPLANATION]
-Portfolio declined by 2.73%. Banking holdings contributed -1.84%, primarily driven by HDFCBANK, as hawkish RBI stance pressured lending outlook. Uncertainty remains regarding the concentrated exposure to Banking and Financial Services sectors, which poses risk to portfolio stability.
-
-Top Drivers:
-* Banking holdings contributed -1.84%, primarily driven by HDFCBANK, as hawkish RBI stance pressured lending outlook.
-* Financial Services holdings contributed -0.37%, primarily driven by BAJFINANCE, as tight liquidity conditions weighed on NBFCs.
-
-Risks:
-* Concentrated exposure to Banking sector poses risk to portfolio stability.
-* Combined exposure to Banking/Finance sectors poses risk to portfolio diversification.
-
-Confidence: 0.90
-AI Judge Score: 10.0 / 10
-```
+1.  **Context Resolver**: Disambiguates pronouns and resolves portfolio context using episodic memory.
+2.  **Intent Classifier**: Maps queries to specific analytical engines (Reason, Risk, Performance).
+3.  **Execution Router**: Orchestrates deterministic analytical tools (mock/live financial data).
+4.  **Causal Chain Builder**: Extracts triggers from raw news and maps them to asset performance.
+5.  **Response Generator**: Syntheses narrative using prioritized memory context.
+6.  **Self-Evaluator**: Internal Llama-3.3 auditor audits the draft for tickers, %, and causes.
+7.  **Self-Correction Loop**: Automatically regenerates responses if the audit score is insufficient.
+8.  **Proactive Engine**: Scans analytical outputs for hidden signals to suggest next-turn analysis.
 
 ---
 
-## How To Run
+## **Tech Stack**
+*   **Logic Engine**: Llama-3.1 & 3.3 (via Groq Cloud)
+*   **Narrative Polisher**: GPT-4o (via OpenAI)
+*   **Frontend**: Streamlit
+*   **Observability**: Langfuse
+*   **Analytics**: Pandas, Plotly, Regex Causal Extraction
 
-1. Clone the repository and install dependencies:
+---
+
+## **Getting Started**
+
+### **1. Clone & Install**
 ```bash
+git clone https://github.com/Archisman-NC/AlphaTrace.git
+cd AlphaTrace
 pip install -r requirements.txt
 ```
 
-2. Configure your environment:
-Create a `.env` file with `GROQ_API_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`.
-
-3. Execute the pipeline for the default portfolio:
-```bash
-python3 main.py
+### **2. Configure Environment**
+Create a `.env` file with your credentials:
+```env
+GROQ_API_KEY=your_groq_key
+OPENAI_API_KEY=your_openai_key
+LANGFUSE_PUBLIC_KEY=your_key
+LANGFUSE_SECRET_KEY=your_key
+LANGFUSE_HOST=your_host
 ```
 
-4. Execute for a specific portfolio ID:
+### **3. Run Application**
 ```bash
-python3 main.py --portfolio PORTFOLIO_002
+streamlit run app.py
 ```
 
 ---
 
-## Tech Stack
-
-* **Language**: Python 3.9+
-* **Validation**: Pydantic v2
-* **Inference**: Groq SDK (Llama 3.3 70B)
-* **Observability**: Langfuse SDK v4
-* **Environment**: python-dotenv
+## **Try These Queries**
+*   **Casual Analysis**: *"Why is my portfolio down today?"*
+*   **Risk Deep-Dive**: *"Detect concentration risk in my holdings."*
+*   **Temporal Reasoning**: *"Is the risk profile getting worse compared to our last check?"*
+*   **Proactive Analysis**: Click the **"🔍 Analyze this signal"** button when the Copilot flags a market divergence.
 
 ---
 
-## Design Decisions
-
-### Hybrid System: Deterministic Reasoning + LLM Interpretation
-The most critical architectural decision was to separate **Reasoning** from **Interpretation**.
-* **Deterministic Logic** performs all financial calculations, sector mappings, and causal linking. This ensures that the grounding of every explanation is mathematically verifiable.
-* **LLM Layer** is strictly restricted to narrative synthesis and qualitative evaluation.
-By preventing the LLM from performing math or link-building, the system effectively eliminates hallucination and ensures high-reliability performance in financial contexts.
+## **Operational Integrity**
+AlphaTrace employs a **Strict Scoring Rubric** (0-10) for all reasoning:
+*   **Ticker Specicity**: Validated matching against a high-fidelity ticker hub.
+*   **Quantification**: Mandatory percentage and P&L grounding.
+*   **Causal Trigger**: Exact matching of news-to-impact triggers.
 
 ---
-
-## Observability
-
-The system integrates **Langfuse** for production-grade observability. Every execution cycle is tracked with detailed traces:
-* **Trace Lifecycle**: Captures the full context from input prompts to final JSON outputs.
-* **Performance Metrics**: Monitors token usage, provider latency, and cost per execution.
-* **Debugging**: Enables granular trace-level debugging for both the generation and evaluation phases.
-
----
-
-## Known Limitations
-
-* **LLM Judge calibration**: The evaluation model does not use a human-labeled benchmark, so scores tend to skew high (8–10). In a production setting, this would be calibrated against expert-graded explanations to ensure scoring rigor.
-
-* **Mock data dependency**: The causal reasoning layer depends on the richness of input news. With sparse signals, the system falls back to quantitative inference, which reduces the narrative's explanatory depth.
-
-* **Static sector mapping**: Stocks not present in the reference sector mapping are ignored during normalization. Integration with a live security data API would be required for broader universe coverage.
-
----
-
-## What I’d extend next
-
-* **Factor attribution**: Decompose portfolio movement into granular components, separating idiosyncratic stock-level performance from broad sector-level volatility.
-
-* **Advanced Risk Modeling (VaR / CVaR)**: Implement rolling risk estimation using historical simulation or parametric models to provide forward-looking volatility projections.
-
-* **Dynamic Signal Weighting**: Refine the confidence scoring model by weighting signals based on magnitude, temporal relevance, and cross-signal alignment, moving beyond the current heuristic-based thresholds.
-
-* **Real-time Market Integration**: Transition from batch ingestion from mock JSON sources to real-time streams (e.g., via ZeroMQ or WebSocket) for low-latency portfolio monitoring.
-
----
-
-## Web Interface (Hugging Face Spaces)
-
-AlphaTrace includes a production-ready web interface built with Gradio, allowing users to trigger reasoning cycles and visualize terminal outputs directly in the browser.
-
-### Features
-* **Live Sandbox**: Run analysis on pre-configured portfolios (PORTFOLIO_001, 002, 003, or ALL).
-* **Console Output Capture**: Displays the full internal trace, including P&L metrics, causal drivers, risks, and AI Judge scores.
-* **Observability Integration**: Automatically links generated briefings to Langfuse traces if configured.
-
-### Deployment to Spaces
-1. **New Space**: Create a new Gradio Space on Hugging Face.
-2. **Settings**: Add the following secret environment variables:
-   * `GROQ_API_KEY`: Your Groq platform key.
-   * `LANGFUSE_PUBLIC_KEY`: For telemetry tracing.
-   * `LANGFUSE_SECRET_KEY`: For telemetry tracing.
-3. **Upload**: Push the repository contents (including `app.py`, `main.py`, `data/`, and `app/`).
-
-### Local Execution
-To run the dashboard locally:
-```bash
-python app.py
-```
-The interface will be accessible at `http://localhost:7860`.
+*Built for the next generation of autonomous investment management.*
