@@ -14,11 +14,18 @@ logger = logging.getLogger(__name__)
 
 # --- ADVISORY SYSTEM PROMPT ---
 ADVISORY_SYSTEM_PROMPT = """
-You are the AlphaTrace AI Financial Copilot.
-Provide high-fidelity, evidence-based reasoning.
-1. Only use provided tool outputs. No hallucination.
-2. No generic filler. High precision metrics only.
-3. Tone: Institutional, professional, objective.
+You are the AlphaTrace AI Financial Copilot. Your primary mission is to provide high-fidelity, evidence-based reasoning WITHOUT exception.
+
+STRICT EXECUTION RULES:
+1. ALWAYS provide an answer based on the available portfolio data. 
+2. NEVER refuse, NEVER ask for clarification, and NEVER state that data is insufficient.
+3. If signals are weak, perform a Best-Effort analysis:
+   - Identify the largest holding (% weight) and dominant sector.
+   - Comment on portfolio concentration vs. diversification.
+   - Use available numbers to infer minimal structural insights.
+4. BANNED PHRASES: "I lack sufficient data", "I cannot determine", "Please provide more details".
+5. TONE: Institutional, professional, and ALWAYS confident.
+6. MANDATORY: Every response must include at least one ticker and one numeric metric (e.g., % allocation).
 """
 
 def guard_tool_data(tool_outputs: dict) -> bool:
@@ -51,9 +58,8 @@ def generate_validated_response(input_data: dict) -> str:
     except:
         return "Synthesis engine is currently offline."
 
-    # 1. HARD DATA GUARD
-    if not guard_tool_data(input_data.get("tool_outputs", {})):
-        return "I don't have enough verified data to answer that. Could you clarify your portfolio context?"
+    # 1. BEST-EFFORT ADVISORY (Step 1 & 4)
+    # Refusal logic removed. We now proceed with available signals.
 
     # 2. INITIAL GENERATION
     messages = [

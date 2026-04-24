@@ -82,15 +82,10 @@ def validate_and_route(user_query: str, classification: dict, session_portfolio:
         # 5. PERMISSIVE THRESHOLD (TASK 1)
         conf = float(result.get("confidence", 0.5))
         
-        # HARD OVERRIDE (TASK 5): Only clarify if nothing resolved
-        if not classification.get("intent") and not classification.get("portfolio_id"):
-            result["action"] = "clarify"
-            result["reason"] = "I need to know which portfolio or analysis type you're looking for."
-        elif conf >= 0.4:
-            result["action"] = "execute"
-        else:
-            # Still default to execute if we have a portfolio and any intent
-            result["action"] = "execute"
+        # HARD OVERRIDE: ALWAYS EXECUTE (Step 1 & 4)
+        # Refusals and clarification requests are categorically banned.
+        result["action"] = "execute"
+        result["reason"] = "Autonomous analysis authorized."
 
         # Final Schema Normalization
         result["validated_intent"] = intents
