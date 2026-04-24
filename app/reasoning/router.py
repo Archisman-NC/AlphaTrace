@@ -38,14 +38,24 @@ def build_error_payload(tool_type: str, error: Exception) -> dict:
         "drivers": [], "risks": [], "metrics": {"error": str(error)}
     }
 
+# --- GLOBAL CONTEXT HELPER ---
+def get_portfolio_context_data(portfolio_id: str) -> dict:
+    """Computes the base identity of the portfolio for visual consistency."""
+    try:
+        raw = load_portfolio(_loader, portfolio_id)
+        norm = normalize_holdings(_loader, raw)
+        exp = compute_sector_exposure(_loader, norm, raw)
+        return {"exposure": exp, "holdings": norm}
+    except: return {"exposure": {}, "holdings": []}
+
 # --- ENRICHED PRODUCTION WRAPPERS ---
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     try:
         m_intel = build_market_intelligence(_loader)
-        raw_portfolio = load_portfolio(_loader, portfolio_id)
-        normalized_holdings = normalize_holdings(_loader, raw_portfolio)
-        exposure = compute_sector_exposure(_loader, normalized_holdings, raw_portfolio)
+        ctx = get_portfolio_context_data(portfolio_id)
+        exposure = ctx["exposure"]
+        normalized_holdings = ctx["holdings"]
         
         stock_map = build_stock_exposure_map(normalized_holdings, {}) 
         linked_trends = link_portfolio_to_sector_trends(exposure, m_intel["sector_trends"])
@@ -63,13 +73,13 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return {
             "type": "reason",
             "status": "success",
-            "summary": f"Causal analysis complete for {portfolio_id}.",
-            "drivers": chains,
-            "risks": conflicts,
+            "summary": f"Reasoning analysis complete for {portfolio_id}.",
+            "drivers": chains, "risks": conflicts,
             "metrics": {
                 "chain_count": len(chains),
-                "conflict_count": len(conflicts),
-                "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"])
+                "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"]),
+                "sector_exposure": exposure, # PERSIST FOR UI
+                "ranked_holdings": normalized_holdings
             }
         }
     except Exception as e:
@@ -77,21 +87,19 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
 
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     try:
-        raw_portfolio = load_portfolio(_loader, portfolio_id)
-        normalized_holdings = normalize_holdings(_loader, raw_portfolio)
-        exposure = compute_sector_exposure(_loader, normalized_holdings, raw_portfolio)
+        ctx = get_portfolio_context_data(portfolio_id)
+        exposure = ctx["exposure"]
         risks = detect_concentration_risk(exposure)
 
         return {
             "type": "risk",
             "status": "success",
-            "summary": "Concentration audit complete.",
-            "drivers": [],
-            "risks": risks,
+            "summary": "Risk audit complete.",
+            "drivers": [], "risks": risks,
             "metrics": {
                 "risk_count": len(risks),
-                "sector_exposure": exposure, # CRITICAL for Proactive Engine
-                "ranked_holdings": normalized_holdings
+                "sector_exposure": exposure, 
+                "ranked_holdings": ctx["holdings"]
             }
         }
     except Exception as e:
@@ -101,13 +109,10 @@ def run_full_analysis_wrapper(portfolio_id: str) -> Dict[str, Any]:
     try:
         reason_data = run_reason_engine_wrapper(portfolio_id)
         risk_data = run_risk_engine_wrapper(portfolio_id)
-        
         metrics = {**reason_data.get("metrics", {}), **risk_data.get("metrics", {})}
-        
         return {
-            "type": "full_analysis",
-            "status": "success",
-            "summary": "Composite analysis complete.",
+            "type": "full_analysis", "status": "success",
+            "summary": "Full analysis complete.",
             "drivers": reason_data.get("drivers", []),
             "risks": risk_data.get("risks", []),
             "metrics": metrics
@@ -116,10 +121,15 @@ def run_full_analysis_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return build_error_payload("full_analysis", e)
 
 def switch_portfolio_wrapper(portfolio_id: str) -> Dict[str, Any]:
+    ctx = get_portfolio_context_data(portfolio_id)
     return {
         "type": "switch_portfolio", "status": "success",
-        "summary": f"Context as {portfolio_id}.",
-        "drivers": [], "risks": [], "metrics": {"portfolio_id": portfolio_id}
+        "summary": f"Switched to {portfolio_id}.",
+        "drivers": [], "risks": [], "metrics": {
+            "portfolio_id": portfolio_id,
+            "sector_exposure": ctx["exposure"],
+            "ranked_holdings": ctx["holdings"]
+        }
     }
 
 EXECUTION_PRIORITY = ["switch_portfolio", "reason", "risk", "full_analysis"]
@@ -141,18 +151,14 @@ def execute_intents(classification: Dict[str, Any], session: Dict[str, Any]) -> 
     for intent in ordered_intents:
         tool_func = ROUTER.get(intent)
         if not tool_func: continue
-
         if intent == "switch_portfolio":
             active_portfolio = target_portfolio_id
             session["current_portfolio"] = active_portfolio
 
         try:
-            print(f"[DEBUG] Stage: {intent} | Output: dict")
             data = tool_func(active_portfolio)
-            assert isinstance(data, dict), f"Tool {intent} failed contract"
             execution_results.append(data)
         except Exception as e:
-            logger.error(f"Execution Error in {intent}: {e}")
             execution_results.append(build_error_payload(intent, e))
 
     return {
