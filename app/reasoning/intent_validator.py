@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from groq import Groq
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -56,18 +58,47 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
         "classification": classification
     }
 
-    try:
+        start_time = time.time()
+        
+        system_msg = VALIDATOR_SYSTEM_PROMPT
+        user_msg = json.dumps(validation_input)
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="intent_validation",
+                metadata={"portfolio_id": classification.get("portfolio_id"), "stage": "validation"}
+            )
+
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": VALIDATOR_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(validation_input)}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             response_format={"type": "json_object"},
             temperature=0.0
         )
         
-        result = json.loads(response.choices[0].message.content)
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content
+        
+        if trace:
+            trace.generation(
+                name="validation_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="llama-3.1-8b-instant",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+
+        result = json.loads(output_text)
         
         # NORMALIZE SCHEMA
         # 1. Ensure validated_intent exists and is a list

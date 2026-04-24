@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from groq import Groq
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -52,18 +54,47 @@ def generate_advisory_response(user_query: str, intents: list, portfolio_id: str
         "user_profile": user_profile
     }
 
-    try:
+        start_time = time.time()
+        
+        system_msg = RESPONSE_SYSTEM_PROMPT
+        user_msg = json.dumps(synthesis_input)
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="response_generation",
+                metadata={"portfolio_id": portfolio_id, "stage": "generation", "user_persona": user_profile.get("experience_level")}
+            )
+
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": RESPONSE_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(synthesis_input)}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             temperature=0.7,
             max_tokens=600
         )
         
-        return response.choices[0].message.content.strip()
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content.strip()
+        
+        if trace:
+            trace.generation(
+                name="generation_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="llama-3.3-70b-versatile",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+            
+        return output_text
     except Exception as e:
         logger.error(f"Response generation failed: {e}")
         return "The analysis is complete, but I'm unable to generate a narrative briefing at this time. Here are the core metrics: " + json.dumps(tool_outputs)

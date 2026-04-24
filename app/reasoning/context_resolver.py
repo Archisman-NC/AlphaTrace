@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from groq import Groq
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -53,18 +55,47 @@ def resolve_context(user_query: str, session: dict) -> dict:
         "session": session
     }
 
-    try:
+        start_time = time.time()
+        
+        system_msg = RESOLVER_SYSTEM_PROMPT
+        user_msg = json.dumps(resolution_input)
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="context_resolution",
+                metadata={"portfolio_id": session.get("current_portfolio"), "stage": "context"}
+            )
+
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": RESOLVER_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(resolution_input)}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             response_format={"type": "json_object"},
             temperature=0.0
         )
         
-        result = json.loads(response.choices[0].message.content)
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content
+        
+        if trace:
+            trace.generation(
+                name="context_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="llama-3.1-8b-instant",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+
+        result = json.loads(output_text)
         
         # Fallback validation
         if not result.get("portfolio_id"):

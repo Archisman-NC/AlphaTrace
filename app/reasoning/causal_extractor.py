@@ -1,7 +1,9 @@
 import os
 import logging
+import time
 from groq import Groq
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -32,20 +34,47 @@ def extract_causal_trigger(headline: str, summary: str) -> str:
     if not headline:
         return "unknown market driver"
 
-    try:
-        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        start_time = time.time()
         
+        system_msg = CAUSAL_EXTRACTOR_PROMPT
+        user_msg = f"Headline: {headline}\nSummary: {summary}"
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="causal_extraction",
+                metadata={"stage": "extraction"}
+            )
+
         # Use llama-3.1-8b-instant for speed
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": CAUSAL_EXTRACTOR_PROMPT},
-                {"role": "user", "content": f"Headline: {headline}\nSummary: {summary}"}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             temperature=0.1 # Absolute deterministic extraction
         )
         
-        return response.choices[0].message.content.strip().lower()
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content.strip().lower()
+        
+        if trace:
+            trace.generation(
+                name="extraction_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="llama-3.1-8b-instant",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+            
+        return output_text
     except Exception as e:
         logger.error(f"Causal Extraction failed: {e}")
         # Graceful fallback to raw headline snippet

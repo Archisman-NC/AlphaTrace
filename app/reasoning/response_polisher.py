@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from openai import OpenAI
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -57,25 +59,52 @@ def polish_response(raw_response: str, intents: list, user_profile: dict, confid
         logger.info("Skipping OpenAI: Response is concise and high-confidence.")
         return raw_response
 
-    try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        start_time = time.time()
         
+        system_msg = POLISHER_SYSTEM_PROMPT
+        user_msg = json.dumps({
+            "response": raw_response,
+            "intents": intents,
+            "user_profile": user_profile
+        })
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="premium_polish",
+                metadata={"stage": "polish", "user_persona": user_profile.get("experience_level")}
+            )
+
         # Use gpt-4o-mini for efficient premium polishing with cost cap
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": POLISHER_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps({
-                    "response": raw_response,
-                    "intents": intents,
-                    "user_profile": user_profile
-                })}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             temperature=0.4,
             max_tokens=200 # Financial cost-control
         )
         
-        return response.choices[0].message.content.strip()
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content.strip()
+        
+        if trace:
+            trace.generation(
+                name="polish_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="gpt-4o-mini",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+            
+        return output_text
     except Exception as e:
         logger.error(f"OpenAI Polisher failed: {e}. Falling back to raw response.")
         # Safe Fallback: Never break UX due to API failure

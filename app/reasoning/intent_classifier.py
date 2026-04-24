@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import time
 from groq import Groq
 from dotenv import load_dotenv
+from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
@@ -69,18 +71,47 @@ def classify_intent(query: str, current_portfolio: str, chat_history: list = Non
         "chat_history": chat_history[-5:] if chat_history else []
     }
 
-    try:
+        start_time = time.time()
+        
+        system_msg = CLASSIFICATION_SYSTEM_PROMPT
+        user_msg = json.dumps(classification_input)
+        
+        trace = None
+        if hasattr(langfuse, "trace"):
+            trace = langfuse.trace(
+                name="intent_classification",
+                metadata={"portfolio_id": current_portfolio, "stage": "classification"}
+            )
+
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(classification_input)}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
             ],
             response_format={"type": "json_object"},
             temperature=0.0
         )
         
-        result = json.loads(response.choices[0].message.content)
+        latency = time.time() - start_time
+        output_text = response.choices[0].message.content
+        
+        if trace:
+            trace.generation(
+                name="classification_call",
+                input={"system": system_msg, "user": user_msg},
+                output=output_text,
+                model="llama-3.1-8b-instant",
+                usage={
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else None,
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else None,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else None
+                },
+                metadata={"latency": latency}
+            )
+            langfuse.flush()
+
+        result = json.loads(output_text)
         
         # NORMALIZE SCHEMA
         # 1. Handle plural 'intents' key if model provides it
