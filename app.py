@@ -15,6 +15,7 @@ from app.reasoning.router import execute_intents
 from app.reasoning.response_generator import stream_advisory_response
 from app.reasoning.response_polisher import polish_response
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
+from app.reasoning.proactive_engine import generate_proactive_insight # Proactive Upgrade
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -38,6 +39,12 @@ if "current_portfolio" not in st.session_state:
 
 if "last_tool_data" not in st.session_state:
     st.session_state.last_tool_data = None
+
+if "proactive_follow_up" not in st.session_state:
+    st.session_state.proactive_follow_up = None
+
+if "last_insight_msg" not in st.session_state:
+    st.session_state.last_insight_msg = None
 
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
@@ -66,13 +73,11 @@ def interpret_conf(c):
     if c > 0.6: return "Moderate"
     return "Low"
 
-# --- Sidebar: Portfolio Intelligence Panel ---
+# --- Sidebar: Hub ---
 with st.sidebar:
     st.title("📊 AlphaTrace Hub")
-    
-    # Portfolio Control
     selected_label = st.selectbox(
-        "Context Portfolio", 
+        "Active Context", 
         options=list(PORTFOLIO_MAPPING.keys()),
         index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0
     )
@@ -85,82 +90,59 @@ with st.sidebar:
         st.session_state.last_tool_data = None
         st.rerun()
 
-    # Visual Analytics Logic
     if st.session_state.last_tool_data:
         st.divider()
-        st.subheader("Portfolio Intelligence")
-        
         data = st.session_state.last_tool_data
         full_analysis = data.get("full_analysis", {})
-        
-        # 1. Confidence Indicator with Interpretation
         conf = data.get("metrics", {}).get("confidence", 0.0)
         st.metric("Reasoning Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
         st.progress(conf)
         
-        st.divider()
-
-        # 2. Sector Exposure (Donut Chart)
         exposure = full_analysis.get("sector_exposure", {})
         if exposure:
-            st.caption("Sector exposure of your portfolio")
+            st.caption("Sector exposure")
             top_sector = max(exposure, key=exposure.get)
-            st.write(f"**Top Exposure:** {top_sector}")
-            
+            st.write(f"**Top:** {top_sector}")
             df_exposure = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
-            fig = px.pie(df_exposure, values="Allocation", names="Sector", hole=0.4, 
-                         color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig.update_layout(margin=dict(l=0, r=0, t=10, b=10), showlegend=False, height=200)
+            fig = px.pie(df_exposure, values="Allocation", names="Sector", hole=0.4, height=180)
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
-        
-        st.divider()
 
-        # 3. Holdings Table (Sorted & Styled)
-        holdings = full_analysis.get("ranked_holdings", [])
-        if holdings:
-            st.markdown("**Top Holdings (by Allocation)**")
-            df_holdings = pd.DataFrame(holdings)
-            df_holdings = df_holdings.sort_values("allocation", ascending=False)
-            
-            def color_change(val):
-                if val > 0: return "color: #00ff00"
-                if val < 0: return "color: #ff4b4b"
-                return "color: grey"
-
-            st.dataframe(
-                df_holdings[["ticker", "allocation", "daily_change"]].style.applymap(color_change, subset=["daily_change"]),
-                hide_index=True,
-                use_container_width=True
-            )
-    else:
-        st.info("No current portfolio data available. Ask a question to start analysis.")
-
-    # Passive Memory Indicators
-    if st.session_state.memory:
-        st.divider()
-        latest = st.session_state.memory[-1]
-        with st.expander("📌 Recent Drivers", expanded=False):
-            for d in latest["drivers"]:
-                st.markdown(f"**{d['sector']}**: {d['cause']}")
-    
     st.divider()
-    st.caption("Temporal Reasoning: ACTIVE")
+    st.caption("Proactive Monitoring: ACTIVE")
 
 # --- Chat Display ---
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
+        # UI Hook for Proactive Suggestion (only on the last assistant message)
+        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1 and st.session_state.proactive_follow_up:
+            if st.button(f"🔍 Perform Follow-up: {st.session_state.proactive_follow_up}", key="proactive_btn"):
+                # Simulate user sending the recommended follow-up
+                follow_up_query = st.session_state.proactive_follow_up
+                st.session_state.proactive_follow_up = None # Consume it
+                # We can't easily auto-trigger chat input from here, but we can append to messages and rerun
+                # Let's set a flag to auto-process on rerun
+                st.session_state.auto_prompt = follow_up_query
+                st.rerun()
+
+# --- Auto Prompt Handling ---
+if "auto_prompt" in st.session_state and st.session_state.auto_prompt:
+    prompt = st.session_state.auto_prompt
+    st.session_state.auto_prompt = None
+else:
+    prompt = st.chat_input("Ask AlphaTrace about your portfolio...")
 
 # --- Reasoning Cycle ---
-if prompt := st.chat_input("Analyze my portfolio..."):
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    if not hasattr(st.session_state, "auto_prompt"): st.rerun() # Ensure UI updates before processing
 
     with st.chat_message("assistant"):
         try:
-            # ANALYTICAL PHASE
-            with st.spinner("Synthesizing temporal signals..."):
+            # 1. ANALYTICAL PHASE
+            with st.spinner("Executing Intelligence Pipeline..."):
                 recent_memory = st.session_state.memory[-3:]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_memory}
                 
@@ -180,7 +162,6 @@ if prompt := st.chat_input("Analyze my portfolio..."):
                     st.session_state.current_portfolio = execution_results["portfolio_id"]
                     tool_data = {res["type"]: res["data"] for res in execution_results["results"]}
                     
-                    # Update Visual Cache
                     st.session_state.last_tool_data = {
                         "full_analysis": tool_data.get("full_analysis", {}),
                         "metrics": {"confidence": validation["confidence"]},
@@ -188,7 +169,15 @@ if prompt := st.chat_input("Analyze my portfolio..."):
                     }
                     prof = get_portfolio_context(st.session_state.current_portfolio)
 
-            # NARRATIVE PHASE
+                    # 3. PROACTIVE ENGINE Hook
+                    proactive = generate_proactive_insight(tool_data, prompt, st.session_state.last_insight_msg)
+                    if proactive:
+                        st.session_state.proactive_follow_up = proactive["follow_up"]
+                        st.session_state.last_insight_msg = proactive["insight"]
+                    else:
+                        st.session_state.proactive_follow_up = None
+
+            # 2. NARRATIVE PHASE
             if validation["action"] == "execute":
                 memory_ctx = extract_relevant_memory(prompt, st.session_state.memory)
                 stream_gen = stream_advisory_response(
@@ -202,15 +191,11 @@ if prompt := st.chat_input("Analyze my portfolio..."):
                 
                 final_response = st.write_stream(stream_gen)
                 
-                # Temporal Trend
-                if len(st.session_state.memory) >= 1:
-                    prev = st.session_state.memory[-1]["metrics"].get("portfolio_change", 0.0)
-                    curr = tool_data.get("full_analysis", {}).get("daily_change_percent", 0.0)
-                    delta = curr - prev
-                    if any(kw in prompt.lower() for kw in ["trend", "before", "worse"]):
-                        trend = f"\n\n**Temporal Insight:** Market health has {'improved' if delta >= 0 else 'worsened'} by {abs(delta):.2f}% since last check."
-                        st.markdown(trend)
-                        final_response += trend
+                # Append Proactive Insight to response
+                if st.session_state.proactive_follow_up:
+                    insight_block = f"\n\n**💡 Proactive Insight:** {st.session_state.last_insight_msg} Want me to investigate?"
+                    st.markdown(insight_block)
+                    final_response += insight_block
 
                 final_briefing = polish_response(final_response, validation["validated_intent"], prof, validation["confidence"])
 
@@ -220,5 +205,5 @@ if prompt := st.chat_input("Analyze my portfolio..."):
                 st.rerun()
 
         except Exception as e:
-            logger.error(f"UI Error: {e}")
-            st.error("Engine Synch Issue.")
+            logger.error(f"Execution Error: {e}")
+            st.error("Engine Sync Failure. Attempting recovery...")
