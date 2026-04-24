@@ -5,6 +5,7 @@ import time
 from groq import Groq
 from dotenv import load_dotenv
 from app.utils.helpers import langfuse
+from app.reasoning.memory_engine import extract_relevant_memory
 
 # Load environment variables
 load_dotenv()
@@ -13,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 CLASSIFIER_SYSTEM_PROMPT = """
 You are a high-precision financial intent classification engine.
-Use structured memory to disambiguate user queries and resolve portfolio context.
+Use the active_memory context to disambiguate user queries.
 
 ## INPUT:
 - user_query: current user input
 - current_portfolio: active selection
-- memory: list of structured past turns (intents, summary, drivers, risks)
+- active_memory: prioritized past drivers, risks, and metrics.
 
 ## OUTPUT FORMAT (STRICT):
 {
@@ -28,16 +29,14 @@ Use structured memory to disambiguate user queries and resolve portfolio context
 }
 
 ## RULES:
-1. If query is a follow-up (e.g. "why?"), infer the intent from the previous memory turns.
-2. If query mentions "risk/safe/danger", include "risk".
-3. Use memory to detect if the user's "this" refers to a specific stock/sector from last turn.
+1. Use active_memory to infer the subject of follow-ups (e.g. "it", "that", "why?").
+2. Focus on "risk" if active_memory shows high severity risks recently.
+3. If user query matches recent drivers in memory, boost confidence for relevant intents.
 """
 
 def classify_intent(query: str, current_portfolio: str, memory: list = None) -> dict:
     """
-    High-precision classification utilizing structured memory.
-    - Disambiguates vague queries using past intents/drivers.
-    - Resolves portfolio_id from continuity context.
+    High-precision classification utilizing Active Memory.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -45,11 +44,14 @@ def classify_intent(query: str, current_portfolio: str, memory: list = None) -> 
         logger.error(f"Failed to initialize Groq for high-precision classification: {e}")
         return {"intent": ["full_analysis"], "portfolio_id": current_portfolio, "confidence": 0.0}
 
+    # Boost context using Active Memory Engine
+    memory_context = extract_relevant_memory(query, memory or [])
+
     # Prepare context for classification
     classification_input = {
         "user_query": query,
         "current_portfolio": current_portfolio,
-        "memory": memory[-3:] if memory else [] # Only last few turns to avoid noise
+        "active_memory": memory_context # Weighted past insights
     }
 
     start_time = time.time()

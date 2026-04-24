@@ -5,6 +5,7 @@ import time
 from groq import Groq
 from dotenv import load_dotenv
 from app.utils.helpers import langfuse
+from app.reasoning.memory_engine import extract_relevant_memory
 
 # Load environment variables
 load_dotenv()
@@ -48,13 +49,14 @@ def resolve_context(user_query: str, session: dict) -> dict:
             "use_memory": False
         }
 
-    # Use structured memory if provided, fallback to raw session
+    # Use Active Memory engine for prioritization
     memory = session.get("memory", [])
+    memory_context = extract_relevant_memory(user_query, memory)
     
     resolution_input = {
         "user_query": user_query,
         "current_portfolio": session.get("current_portfolio"),
-        "recent_episodes": memory[-3:] # High-density context window
+        "active_memory": memory_context # Prioritized context
     }
 
     start_time = time.time()
