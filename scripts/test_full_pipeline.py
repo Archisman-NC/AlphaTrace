@@ -4,45 +4,75 @@ sys.path.append(os.getcwd())
 
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route
+from app.reasoning.router import execute_intents
 from app.reasoning.response_generator import generate_advisory_response
+from app.reasoning.response_polisher import polish_response
 
-def test_personalized_pipeline():
-    print("Testing Personalized Reasoning Pipeline (Copilot Mode)...\n")
+def run_integration_test():
+    print("🚀 Running Full System Integration Test (Hybrid Reasoning)...\n")
     
-    query = "why did my portfolio fall and is it safe?"
+    # Complex query to trigger OpenAI Polish (Multi-intent + Long Response potential)
+    query = "why did my portfolio fall, is it safe, and should I switch to a more conservative strategy?"
     current_portfolio = "PORTFOLIO_002"
     
+    user_profile = {"risk_tolerance": "medium", "experience_level": "intermediate"}
+    
     mock_tool_outputs = {
-        "reason": "Aggressive tech sector exposure led to a 2.4% dip following hawkish interest rate signaling.",
-        "risk": "Standard deviation remains elevated, but maximum drawdown is within historical bounds for your aggressive profile.",
-        "analysis": "Sector: Tech (-3.2%). Individual drivers: TCS (-4.5%)."
+        "reason": "Aggressive tech sector exposure led to a 2.4% dip following hawkish interest rate signaling from the Fed.",
+        "risk": "Volatility metrics are currently 12% above your baseline, though historical drawdowns suggest this is a temporary cyclical correction.",
+        "switch": "Switching to PORTFOLIO_004 (Balanced) would reduce tech exposure by 15% and increase fixed-income stability."
     }
     
-    profiles = [
-        {"risk_tolerance": "low", "experience_level": "beginner", "desc": "Conservative Beginner"},
-        {"risk_tolerance": "high", "experience_level": "advanced", "desc": "Aggressive Professional"}
-    ]
+    # 1. Intent & Validation
+    print("[1] Logic Phase: Classifier & Validator...")
+    classification = classify_intent(query, current_portfolio)
+    validation = validate_and_route(query, classification)
+    print(f"Intents detected: {validation['validated_intent']}\n")
     
-    for profile in profiles:
-        print(f"--- Running for: {profile['desc']} ---")
-        
-        # 1. Classify & Validate (Standard logic)
-        classification = classify_intent(query, current_portfolio)
-        validation = validate_and_route(query, classification)
-        
-        # 2. Personalized Response
-        if validation["action"] == "execute":
-            response = generate_advisory_response(
-                query, 
-                validation["validated_intent"], 
-                validation["portfolio_id"], 
-                mock_tool_outputs,
-                profile
-            )
-            print(f"Personalized Advisory:\n")
-            print(response)
-        
-        print("-" * 50 + "\n")
+    if validation["action"] != "execute":
+        print(f"FAIL: Logic engine failed to authorize execution. Reason: {validation['reason']}")
+        return
+
+    # 2. Execution Router
+    print("[2] Execution Phase: Orchestrating Tools...")
+    execution_results = execute_intents({
+        "intent": validation["validated_intent"],
+        "portfolio_id": validation["portfolio_id"],
+        "confidence": validation["confidence"]
+    }, {"current_portfolio": current_portfolio})
+    
+    tool_data = {r["type"]: r["data"] for r in execution_results["results"]}
+
+    # 3. Narrative Synthesis (Groq)
+    print("[3] Synthesis Phase: Generating Raw Advisory (Groq)...")
+    raw_response = generate_advisory_response(
+        query,
+        validation["validated_intent"],
+        execution_results["portfolio_id"],
+        mock_tool_outputs,
+        user_profile
+    )
+    
+    # 4. Premium Polish (OpenAI)
+    print("[4] Polish Phase: Selective OpenAI Refinement...")
+    final_response = polish_response(
+        raw_response,
+        validation["validated_intent"],
+        user_profile,
+        validation["confidence"]
+    )
+    
+    print("\n" + "="*50)
+    print("FINAL ALPHA-TRACE ADVISORY")
+    print("="*50)
+    print(final_response)
+    print("="*50 + "\n")
+    
+    # Verification
+    if "Follow-up" in final_response or "?" in final_response:
+        print("✅ SUCCESS: Hybrid Intelligence is ACTIVE (OpenAI polish detected).")
+    else:
+        print("⚠️ NOTE: OpenAI was skipped or failed. Output is raw Groq synthesis.")
 
 if __name__ == "__main__":
-    test_personalized_pipeline()
+    run_integration_test()
