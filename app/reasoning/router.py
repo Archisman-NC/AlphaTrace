@@ -1,9 +1,8 @@
 import logging
-import traceback
 import os
 import json
 from typing import Dict, List, Any, Optional
-from app.utils.helpers import safe_slice
+from app.utils.helpers import safe_slice, safe_float
 
 # Core Ingestion & Analytics
 from app.ingestion.data_loader import DataLoader
@@ -28,25 +27,24 @@ from app.reasoning.conflict_detector import detect_conflicts
 
 logger = logging.getLogger(__name__)
 
-# Global Singleton Loader for Mock Environment
+# Global Singleton Loader
 _loader = DataLoader(os.path.join("data", "mock"))
-
 VALID_PORTFOLIOS = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
 
 def build_safe_error_payload(tool_type: str) -> dict:
-    """Returns a user-safe fallback instead of internal technical errors."""
     return {
-        "type": tool_type,
-        "status": "error",
-        "summary": "I'm currently missing some required data to provide an accurate breakdown for this section.",
+        "type": tool_type, "status": "error",
+        "summary": "I'm currently missing some required data to provide an accurate breakdown.",
         "drivers": [], "risks": [], "metrics": {}
     }
 
-# --- GLOBAL CONTEXT HELPER ---
 def get_portfolio_context_data(portfolio_id: str) -> dict:
-    """Computes the base identity of the portfolio with strict validation."""
-    if portfolio_id not in VALID_PORTFOLIOS and portfolio_id != "ALL_PORTFOLIOS":
-        return {"error": "unknown_portfolio", "exposure": {}, "holdings_map": {}, "ranked_holdings": []}
+    # Fix 4: Invalid Portfolio Validation
+    if not isinstance(portfolio_id, str) or portfolio_id not in VALID_PORTFOLIOS:
+        if portfolio_id == "ALL_PORTFOLIOS": pass # Allowed for master view
+        else:
+            logger.warning(f"Invalid portfolio_id: {portfolio_id}, defaulting to PORTFOLIO_001")
+            portfolio_id = "PORTFOLIO_001"
 
     try:
         raw = load_portfolio(_loader, portfolio_id)
@@ -57,23 +55,27 @@ def get_portfolio_context_data(portfolio_id: str) -> dict:
         
         ranked_holdings = []
         for ticker, h_data in norm_map.items():
+            # Fix 6: Numeric Validation for Holdings
+            weight = h_data.get("weight", 0.0)
+            if not isinstance(weight, (int, float)): weight = safe_float(weight)
+            
             ranked_holdings.append({
-                "ticker": ticker, "sector": h_data.get("sector"),
-                "weight": h_data.get("weight"), "daily_change": h_data.get("day_change", 0.0)
+                "ticker": str(ticker), 
+                "sector": str(h_data.get("sector", "Unknown")),
+                "weight": weight,
+                "daily_change": safe_float(h_data.get("day_change", 0.0))
             })
         ranked_holdings.sort(key=lambda x: x["weight"], reverse=True)
         
-        return {"exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings}
+        return {"exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings, "portfolio_id": portfolio_id}
     except Exception as e:
-        logger.error(f"Context data failure: {e}")
+        logger.error(f"Context error: {e}")
         return {"error": "exception", "exposure": {}, "holdings_map": {}, "ranked_holdings": []}
-
-# --- ENRICHED PRODUCTION WRAPPERS ---
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     ctx = get_portfolio_context_data(portfolio_id)
-    if "error" in ctx:
-        return build_safe_error_payload("reason")
+    if "error" in ctx: return build_safe_error_payload("reason")
+    p_id = ctx.get("portfolio_id", portfolio_id)
 
     try:
         m_intel = build_market_intelligence(_loader)
@@ -92,7 +94,7 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
 
         return {
             "type": "reason", "status": "success",
-            "summary": f"Analytical check complete for {portfolio_id}.",
+            "summary": f"Analytical check complete for {p_id}.",
             "drivers": safe_slice(chains, k=5), "risks": safe_slice(conflicts, k=3),
             "metrics": {
                 "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"]),
@@ -100,13 +102,12 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except Exception as e:
+    except Exception:
         return build_safe_error_payload("reason")
 
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     ctx = get_portfolio_context_data(portfolio_id)
-    if "error" in ctx:
-        return build_safe_error_payload("risk")
+    if "error" in ctx: return build_safe_error_payload("risk")
 
     try:
         risks = detect_concentration_risk(ctx["exposure"])
@@ -119,23 +120,20 @@ def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except Exception as e:
+    except Exception:
         return build_safe_error_payload("risk")
 
 def run_full_analysis_wrapper(portfolio_id: str) -> Dict[str, Any]:
-    reason_data = run_reason_engine_wrapper(portfolio_id)
-    risk_data = run_risk_engine_wrapper(portfolio_id)
-    
-    # If both major components fail, return a composite safe error
-    if reason_data["status"] == "error" and risk_data["status"] == "error":
+    reason = run_reason_engine_wrapper(portfolio_id)
+    risk = run_risk_engine_wrapper(portfolio_id)
+    if reason["status"] == "error" and risk["status"] == "error":
         return build_safe_error_payload("full_analysis")
-
-    metrics = {**reason_data.get("metrics", {}), **risk_data.get("metrics", {})}
+    
+    metrics = {**reason.get("metrics", {}), **risk.get("metrics", {})}
     return {
         "type": "full_analysis", "status": "success",
-        "summary": "Completed comprehensive portfolio audit.",
-        "drivers": reason_data.get("drivers", []),
-        "risks": risk_data.get("risks", []),
+        "summary": "Full analysis complete.",
+        "drivers": reason.get("drivers", []), "risks": risk.get("risks", []),
         "metrics": metrics
     }
 
@@ -144,14 +142,14 @@ def switch_portfolio_wrapper(portfolio_id: str) -> Dict[str, Any]:
     if "error" in ctx:
         return {
             "type": "switch_portfolio", "status": "error",
-            "summary": "I don’t have access to that portfolio. Please double-check the ID.",
+            "summary": "I couldn't find that portfolio. Please provide a valid ID.",
             "drivers": [], "risks": [], "metrics": {}
         }
     return {
         "type": "switch_portfolio", "status": "success",
-        "summary": f"Context moved to {portfolio_id}.",
+        "summary": f"Context as {ctx['portfolio_id']}.",
         "drivers": [], "risks": [], 
-        "metrics": {"portfolio_id": portfolio_id, "sector_exposure": ctx["exposure"]}
+        "metrics": {"portfolio_id": ctx["portfolio_id"], "sector_exposure": ctx["exposure"]}
     }
 
 EXECUTION_PRIORITY = ["switch_portfolio", "reason", "risk", "full_analysis"]
