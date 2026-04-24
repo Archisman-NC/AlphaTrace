@@ -1,26 +1,26 @@
-import sys
 import os
-import time
+import sys
 
-print("🚀 CLEAN IMPORT SYSTEM ACTIVE")
-# --- Path Stabilization Sentinel (Part 4) ---
-# Ensures Python accurately recognizes the 'app' package in Streamlit
+# --- Disable Problematic Hot-Reload (Part 1) ---
+os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
+
+# --- Import Stability Debug (Part 6) ---
+print("🚀 STABLE IMPORT MODE ACTIVE")
+
+# --- Path Stabilization Sentinel ---
 sys.path.append(os.path.abspath("."))
 
-import streamlit as st
 import json
 import logging
+import time
+
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
-from app.utils.helpers import safe_float
 
-# --- Namespace Integrity Check ---
-try:
-    import app
-    print(f"[BOOT] Package 'app' resolved to: {app.__file__}")
-except Exception as e:
-    print(f"[CRITICAL] AlphaTrace structural failure: {e}")
+# AlphaTrace Core Imports (Part 2)
+from app.utils.helpers import safe_float
 
 # --- Global Import Shield ---
 try:
@@ -33,7 +33,7 @@ try:
 except Exception:
     def generate_proactive_insight(*args, **kwargs): return None
 
-# Standard Imports
+# Reasoning & Synthesis
 from app.reasoning.context_resolver import resolve_context
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route

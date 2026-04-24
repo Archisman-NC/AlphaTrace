@@ -5,30 +5,10 @@ from typing import Dict, List, Any
 # Standardized Imports
 from app.utils.helpers import safe_float
 
-# Analytical Components
-from app.ingestion.data_loader import DataLoader
-from app.analytics.market_intelligence import build_market_intelligence
-from app.analytics.portfolio_loader import load_portfolio
-from app.analytics.portfolio_normalizer import normalize_holdings
-from app.analytics.sector_exposure import compute_sector_exposure
-from app.analytics.stock_exposure_map import build_stock_exposure_map
-from app.analytics.sector_portfolio_link import link_portfolio_to_sector_trends
-from app.analytics.sector_performance import compute_sector_performance
-from app.analytics.sector_impact import compute_sector_impact
-from app.analytics.top_impact_sectors import get_top_impact_sectors
-from app.analytics.risk_detection import detect_concentration_risk
-
-# Reasoning Components
-from app.reasoning.stock_impact_drilldown import get_stock_level_impact
-from app.reasoning.news_portfolio_link import link_news_to_portfolio
-from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
-from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
-from app.reasoning.causal_chain_builder import build_causal_chains
-from app.reasoning.conflict_detector import detect_conflicts
+from app.utils.helpers import safe_float
 
 logger = logging.getLogger(__name__)
 
-_loader = DataLoader(os.path.join("data", "mock"))
 VALID_PORTFOLIOS = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
 
 def build_safe_error_payload(tool_type: str) -> dict:
@@ -39,6 +19,12 @@ def build_safe_error_payload(tool_type: str) -> dict:
     }
 
 def get_portfolio_context_data(portfolio_id: str) -> dict:
+    from app.ingestion.data_loader import DataLoader
+    from app.analytics.portfolio_loader import load_portfolio
+    from app.analytics.portfolio_normalizer import normalize_holdings
+    from app.analytics.sector_exposure import compute_sector_exposure
+    
+    _loader = DataLoader(os.path.join("data", "mock"))
     # Portfolio Validation
     if portfolio_id not in VALID_PORTFOLIOS:
         portfolio_id = "PORTFOLIO_001"
@@ -60,14 +46,28 @@ def get_portfolio_context_data(portfolio_id: str) -> dict:
             })
         ranked_holdings.sort(key=lambda x: x["weight"], reverse=True)
         
-        return {"exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings, "portfolio_id": portfolio_id}
+        return {"_loader": _loader, "exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings, "portfolio_id": portfolio_id}
     except:
         return {"error": "exception"}
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
+    from app.analytics.market_intelligence import build_market_intelligence
+    from app.analytics.stock_exposure_map import build_stock_exposure_map
+    from app.analytics.sector_portfolio_link import link_portfolio_to_sector_trends
+    from app.analytics.sector_performance import compute_sector_performance
+    from app.analytics.sector_impact import compute_sector_impact
+    from app.analytics.top_impact_sectors import get_top_impact_sectors
+    from app.reasoning.stock_impact_drilldown import get_stock_level_impact
+    from app.reasoning.news_portfolio_link import link_news_to_portfolio
+    from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
+    from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
+    from app.reasoning.causal_chain_builder import build_causal_chains
+    from app.reasoning.conflict_detector import detect_conflicts
+
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("reason")
     p_id = ctx["portfolio_id"]
+    _loader = ctx["_loader"]
 
     try:
         m_intel = build_market_intelligence(_loader)
@@ -98,6 +98,8 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
         return build_safe_error_payload("reason")
 
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
+    from app.analytics.risk_detection import detect_concentration_risk
+    
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("risk")
 
