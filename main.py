@@ -1,10 +1,9 @@
 import sys
+import os
 
-# --- Hot-Reload Module Sanitizer ---
-modules_to_clear = ["app", "app.utils", "app.reasoning", "app.analytics", "app.evaluation"]
-for m in list(sys.modules.keys()):
-    if any(m.startswith(prefix) for prefix in modules_to_clear):
-        del sys.modules[m]
+# --- Path Stabilization Sentinel ---
+# Ensures absolute imports resolve to the project root
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
 import os
