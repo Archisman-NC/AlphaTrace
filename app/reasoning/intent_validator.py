@@ -1,61 +1,71 @@
 import os
 import json
 import logging
-import time
 from groq import Groq
 from dotenv import load_dotenv
-from app.utils.helpers import langfuse
 
 # Load environment variables
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 VALID_PORTFOLIOS = ["PORTFOLIO_001 (Rahul)", "PORTFOLIO_002 (Priya)", "PORTFOLIO_003 (Arun)"]
 
 VALIDATOR_SYSTEM_PROMPT = f"""
 You are the Advisory Guardian for AlphaTrace. 
-Your mission is to ensure the AI only executes tasks it has data for.
+Your mission is to ensure the AI actions queries whenever possible.
 
 ## DATA UNIVERSE:
 - Valid Portfolios: {", ".join(VALID_PORTFOLIOS)}
-- Valid Intents: reason (causal analysis), risk (hazard detection), switch_portfolio (context change).
+- Valid Intents: reason (causal), risk (hazards), switch_portfolio, full_analysis.
 
-## ACTION RULES:
-- EXECUTE: Confidence >= 0.5 and query maps to valid data.
-- CLARIFY: Query is vague or asks for a user/portfolio not in the universe.
-- FALLBACK: Query is non-financial or inappropriate.
+## ACTION RULES (BE PERMISSIVE):
+- ACTION: Confidence >= 0.4.
+- DEFAULT INTENT: If unsure, use "full_analysis".
+- CLARIFY: ONLY if BOTH intent AND portfolio_id are completely missing.
 
-## MANDATORY USER FEEDBACK:
-If you action is 'clarify', the 'reason' must be a polite instruction.
-- Example: "I don't have data for that user. I can assist with Rahul, Priya, or Arun's portfolios."
-- Example: "Could you specify what kind of analysis you're looking for?"
+## PATTERN OVERRIDES:
+- "best stock", "top performing" -> ranking intent
+- "analysis", "breakdown", "check" -> full_analysis intent
 
-## STRICT NO-LEAK:
-- NEVER mention internal error names or data logic.
-- Return STRICT JSON.
+Return STRICT JSON.
 """
 
-def validate_and_route(user_query: str, classification: dict) -> dict:
+def validate_and_route(user_query: str, classification: dict, session_portfolio: str = "PORTFOLIO_001") -> dict:
     """
-    Ensures intent is grounded and user-safe.
+    Production-grade permissive router.
+    Ensures that narrow or vague queries still trigger analytical runs.
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except Exception as e:
-        logger.error(f"Failed to initialize Groq for intent validation: {e}")
-        return {
-            "action": "fallback", "validated_intent": ["full_analysis"],
-            "portfolio_id": "N/A", "confidence": 0.0,
-            "reason": "I'm having trouble connecting to my reasoning engine. Please try again."
-        }
+        logger.error(f"Groq connection failure: {e}")
+        return {"action": "execute", "validated_intent": ["full_analysis"], "portfolio_id": session_portfolio, "confidence": 0.5}
 
-    validation_input = {
-        "user_query": user_query,
-        "classification": classification
-    }
+    # 1. APPLY PATTERN OVERRIDES (TASK 4)
+    q_low = user_query.lower()
+    if any(p in q_low for p in ["best stock", "top performing", "ranking"]):
+        if "ranking" not in classification.get("intent", []):
+            classification.setdefault("intent", []).append("ranking")
+    
+    if any(p in q_low for p in ["analysis", "breakdown", "check"]):
+        if "full_analysis" not in classification.get("intent", []):
+            classification.setdefault("intent", []).append("full_analysis")
 
+    # 2. INTENT FALLBACK (TASK 3)
+    intents = classification.get("intent", [])
+    if not intents:
+        intents = ["full_analysis"]
+        classification["intent"] = intents
+
+    # 3. PORTFOLIO FALLBACK (TASK 2)
+    portfolio_id = classification.get("portfolio_id")
+    if not portfolio_id or portfolio_id == "N/A":
+        portfolio_id = session_portfolio
+        classification["portfolio_id"] = portfolio_id
+
+    # 4. LLM-BASED ACTION AUDIT
     try:
+        validation_input = {"user_query": user_query, "classification": classification}
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -68,19 +78,28 @@ def validate_and_route(user_query: str, classification: dict) -> dict:
         
         result = json.loads(response.choices[0].message.content)
         
-        # NORMALIZE SCHEMA
-        if "action" not in result: result["action"] = "execute"
-        if "validated_intent" not in result: result["validated_intent"] = classification.get("intent", ["full_analysis"])
+        # 5. PERMISSIVE THRESHOLD (TASK 1)
+        conf = float(result.get("confidence", 0.5))
         
-        # Sanitize 'reason' to ensure no internal leakage
-        if result.get("action") == "clarify" and not result.get("reason"):
-            result["reason"] = "Could you please provide more details so I can assist you better?"
-            
+        # HARD OVERRIDE (TASK 5): Only clarify if nothing resolved
+        if not classification.get("intent") and not classification.get("portfolio_id"):
+            result["action"] = "clarify"
+            result["reason"] = "I need to know which portfolio or analysis type you're looking for."
+        elif conf >= 0.4:
+            result["action"] = "execute"
+        else:
+            # Still default to execute if we have a portfolio and any intent
+            result["action"] = "execute"
+
+        # Final Schema Normalization
+        result["validated_intent"] = intents
+        result["portfolio_id"] = portfolio_id
+        
         return result
+        
     except Exception as e:
-        logger.error(f"Intent validation failed: {e}")
+        logger.error(f"Intent validation fault: {e}")
         return {
-            "action": "execute", "validated_intent": classification.get("intent", ["full_analysis"]),
-            "portfolio_id": classification.get("portfolio_id", "N/A"),
-            "confidence": 0.5, "reason": "Self-corrected execution"
+            "action": "execute", "validated_intent": intents,
+            "portfolio_id": portfolio_id, "confidence": 0.5
         }
