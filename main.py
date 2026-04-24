@@ -1,10 +1,16 @@
 import sys
 import os
+import time
+
+# --- Deterministic Module Reset (Step 2) ---
+# Prevents Streamlit hot-reload from corrupting the 'app' namespace
+for m in list(sys.modules.keys()):
+    if m.startswith("app."):
+        del sys.modules[m]
 
 # --- Path Stabilization Sentinel ---
 # Ensures absolute imports resolve to the project root
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 import streamlit as st
 import os
 import json

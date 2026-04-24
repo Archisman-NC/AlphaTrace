@@ -2,26 +2,12 @@ import os
 import json
 import logging
 import time
-import importlib
 from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
 from app.utils.helpers import langfuse
 
-# --- DYNAMIC EVALUATOR LOADER ---
-try:
-    evaluator_module = importlib.import_module("app.evaluation.llm_evaluator")
-    evaluate_response = getattr(evaluator_module, "evaluate_response")
-    print("[DEBUG] evaluator loaded successfully")
-except Exception as e:
-    print("[FATAL] evaluator load failed:", e)
-    def evaluate_response(*args, **kwargs):
-        """Dynamic fallback evaluator"""
-        return {
-            "score": 7.0,
-            "details": {"has_ticker": True, "is_quant": True, "has_causal": True},
-            "feedback": "fallback heuristic evaluation"
-        }
+from app.evaluation.llm_evaluator import evaluate_response
 
 load_dotenv()
 logger = logging.getLogger(__name__)
