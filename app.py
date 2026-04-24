@@ -9,7 +9,8 @@ from app.reasoning.context_resolver import resolve_context
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route
 from app.reasoning.router import execute_intents
-from app.reasoning.response_generator import generate_advisory_response
+from app.reasoning.response_generator import stream_advisory_response # Updated to streaming
+from app.reasoning.response_polisher import polish_response
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +23,6 @@ load_dotenv()
 st.set_page_config(page_title="AlphaTrace AI Copilot", page_icon="📊", layout="wide")
 
 # --- Session Initialization ---
-# --- Session Initialization ---
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
     "Priya Patel (Sector Concentrated)": "PORTFOLIO_002",
@@ -30,7 +30,6 @@ PORTFOLIO_MAPPING = {
     "Master View (Combined)": "ALL_PORTFOLIOS"
 }
 
-# Function to get portfolio metadata from JSON
 def get_portfolio_context(pid):
     try:
         with open("data/mock/portfolios.json", "r") as f:
@@ -41,7 +40,7 @@ def get_portfolio_context(pid):
             p = data["portfolios"].get(pid, {})
             return {
                 "risk_tolerance": p.get("risk_profile", "medium").lower(),
-                "experience_level": "intermediate", # Default for mock
+                "experience_level": "intermediate", 
                 "name": p.get("user_name", "User")
             }
     except Exception:
@@ -56,77 +55,13 @@ if "current_portfolio" not in st.session_state:
 if "last_analysis" not in st.session_state:
     st.session_state.last_analysis = None
 
-# --- Custom Logic: Reasoning Pipeline ---
-def get_alpha_trace_response(user_input: str) -> str:
-    """
-    Executes the full AlphaTrace reasoning cycle from query to narrative synthesis.
-    """
-    try:
-        # Step 0: Context Resolution (Memory)
-        session_context = {
-            "current_portfolio": st.session_state.current_portfolio,
-            "last_analysis": st.session_state.last_analysis
-        }
-        resolution = resolve_context(user_input, session_context)
-        resolved_query = resolution["resolved_query"]
-        portfolio_id = resolution["portfolio_id"]
-        
-        # Step 1: Intent Classification
-        classification = classify_intent(resolved_query, portfolio_id, st.session_state.messages)
-        
-        # Step 2: Intent Validation
-        validation = validate_and_route(resolved_query, classification)
-        
-        if validation["action"] == "fallback":
-            return f"I'm sorry, I couldn't clearly understand the request. {validation.get('reason', '')}"
-        
-        if validation["action"] == "clarify":
-            return f"I think I understand, but could you clarify? {validation.get('reason', '')}"
-
-        # Step 3: Execution Routing
-        # Update State if portfolio switched via AI command
-        target_pid = validation["portfolio_id"]
-        
-        execution_results = execute_intents({
-            "intent": validation["validated_intent"],
-            "portfolio_id": target_pid,
-            "confidence": validation["confidence"]
-        }, {"current_portfolio": st.session_state.current_portfolio})
-        
-        st.session_state.current_portfolio = execution_results["portfolio_id"]
-
-        # Aggregate data for generator
-        tool_data = {}
-        for result in execution_results["results"]:
-            tool_data[result["type"]] = result["data"]
-
-        # Step 4: Narrative Synthesis
-        prof = get_portfolio_context(st.session_state.current_portfolio)
-        raw_response = generate_advisory_response(
-            resolved_query,
-            validation["validated_intent"],
-            execution_results["portfolio_id"],
-            tool_data,
-            prof
-        )
-        
-        # Step 5: Premium Polish (Hybrid Strategy)
-        from app.reasoning.response_polisher import polish_response
-        final_response = polish_response(
-            raw_response, 
-            validation["validated_intent"], 
-            prof,
-            validation["confidence"]
-        )
-
-        # Save analysis for next turn context
-        st.session_state.last_analysis = {"summary": final_response}
-        
-        return final_response
-
-    except Exception as e:
-        logger.error(f"Reasoning Pipeline Error: {e}")
-        return f"System Error: I encountered an issue processing your request. Please check my status logs."
+# --- Custom Styling ---
+st.markdown("""
+<style>
+    .stChatMessage { border-radius: 12px; margin-bottom: 10px; }
+    .stChatInputContainer { padding-bottom: 20px; }
+</style>
+""", unsafe_allow_html=True)
 
 # --- UI Layout ---
 st.title("📊 AlphaTrace AI Copilot")
@@ -135,8 +70,6 @@ st.markdown("*Analyze your portfolio conversationally using causal AI.*")
 # --- Sidebar info ---
 with st.sidebar:
     st.header("Select Context")
-    
-    # Portfolio Toggle
     selected_label = st.selectbox(
         "Active Portfolio", 
         options=list(PORTFOLIO_MAPPING.keys()),
@@ -144,41 +77,77 @@ with st.sidebar:
     )
     
     new_pid = PORTFOLIO_MAPPING[selected_label]
-    
-    # Trigger Update + Reset if selection changes
     if new_pid != st.session_state.current_portfolio:
         st.session_state.current_portfolio = new_pid
-        st.session_state.messages = []
+        st.session_state.messages = [] # Reset on switch
         st.session_state.last_analysis = None
-        st.success(f"Switched to {selected_label}")
         st.rerun()
 
     st.divider()
-    prof_meta = get_portfolio_context(st.session_state.current_portfolio)
-    st.write(f"👤 **User:** {prof_meta['name']}")
-    st.write(f"⚖️ **Risk:** {prof_meta['risk_tolerance'].upper()}")
-    
-    if st.button("Clear Chat"):
-        st.session_state.messages = []
-        st.session_state.last_analysis = None
-        st.rerun()
+    st.info("AlphaTrace is reasoning using hybrid Llama-3.3 (Logic) and GPT-4o-mini (Polish) strategies.")
 
 # --- Chat Display ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- Chat Input ---
-if prompt := st.chat_input("How can I help with your portfolio today?"):
-    # 1. Display User Message
+# --- Chat Input & Reasoning Cycle ---
+if prompt := st.chat_input("Ask about your portfolio..."):
+    # Display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Process & Display Assistant Response
+    # Reasoning Cycle
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing causal chains..."):
-            response = get_alpha_trace_response(prompt)
-            st.markdown(response)
-    
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        try:
+            # 1. ANALYTICAL PHASE (Spinner)
+            with st.spinner("Analyzing market signals and portfolio data..."):
+                session_context = {
+                    "current_portfolio": st.session_state.current_portfolio,
+                    "last_analysis": st.session_state.last_analysis
+                }
+                
+                # Context & Intent logic
+                resolution = resolve_context(prompt, session_context)
+                classification = classify_intent(resolution["resolved_query"], resolution["portfolio_id"], st.session_state.messages[:-1])
+                validation = validate_and_route(resolution["resolved_query"], classification)
+                
+                if validation["action"] != "execute":
+                    response_text = f"Could you clarify? {validation.get('reason', 'I need more context to be precise.')}"
+                    st.markdown(response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": response_text})
+                else:
+                    # Execute Tools
+                    execution_results = execute_intents({
+                        "intent": validation["validated_intent"],
+                        "portfolio_id": validation["portfolio_id"],
+                        "confidence": validation["confidence"]
+                    }, {"current_portfolio": st.session_state.current_portfolio})
+                    
+                    st.session_state.current_portfolio = execution_results["portfolio_id"]
+                    tool_data = {res["type"]: res["data"] for res in execution_results["results"]}
+                    prof = get_portfolio_context(st.session_state.current_portfolio)
+
+            # 2. NARRATIVE PHASE (Streaming - No Spinner)
+            if validation["action"] == "execute":
+                stream_gen = stream_advisory_response(
+                    resolution["resolved_query"],
+                    validation["validated_intent"],
+                    execution_results["portfolio_id"],
+                    tool_data,
+                    prof
+                )
+                
+                # Stream to UI and capture final text
+                final_response = st.write_stream(stream_gen)
+                
+                # Update State
+                st.session_state.messages.append({"role": "assistant", "content": final_response})
+                st.session_state.last_analysis = {"summary": final_response}
+
+        except Exception as e:
+            logger.error(f"Pipeline Error: {e}")
+            err_msg = "I encountered an issue processing your request. Please check my status logs."
+            st.error(err_msg)
+            st.session_state.messages.append({"role": "assistant", "content": err_msg})
