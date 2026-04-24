@@ -19,14 +19,14 @@ except Exception as e:
         """Dynamic fallback evaluator"""
         return {
             "score": 7.0,
-            "breakdown": {"has_ticker": True, "is_quant": True, "has_causal": True},
+            "details": {"has_ticker": True, "is_quant": True, "has_causal": True},
             "feedback": "fallback heuristic evaluation"
         }
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- ADVISORY SYSTEM PROMPTS ---
+# --- ADVISORY SYSTEM PROMPT ---
 ADVISORY_SYSTEM_PROMPT = """
 You are the AlphaTrace AI Financial Copilot.
 Provide high-fidelity, evidence-based reasoning.
@@ -43,8 +43,8 @@ def guard_tool_data(tool_outputs: dict) -> bool:
 
 def generate_validated_response(input_data: dict) -> str:
     """
-    SELECTIVE REPAIR ARCHITECTURE:
-    generate -> evaluate -> targeted repair -> merge -> final
+    REGRESSION-SAFE REPAIR ARCHITECTURE:
+    generate -> evaluate -> targeted repair -> signal audit -> merge/discard
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -74,28 +74,22 @@ def generate_validated_response(input_data: dict) -> str:
     # 3. INITIAL EVALUATION
     eval_result = evaluate_response(initial_draft)
     initial_score = eval_result.get("score", 0.0)
-    breakdown = eval_result.get("details", {})
+    initial_breakdown = eval_result.get("details", {})
     
     # Bypass repair if already institutional grade
     if initial_score >= 6.5:
-        print(f"[EVALUATOR] score={initial_score} (Bypassing repair)")
         return initial_draft
 
-    print(f"[EVALUATOR] initial_score={initial_score} (Triggering selective repair)")
-
-    # 4. SELECTIVE REPAIR (TASK 1 & 2)
+    # 4. SELECTIVE REPAIR
     missing_elements = []
-    if not breakdown.get("has_ticker"): missing_elements.append("specific stock tickers (e.g. HDFCBANK)")
-    if not breakdown.get("is_quant"): missing_elements.append("numerical percentage impact (%)")
-    if not breakdown.get("has_causal"): missing_elements.append("causal reasoning (linking drivers to impact)")
+    if not initial_breakdown.get("has_ticker"): missing_elements.append("specific stock tickers")
+    if not initial_breakdown.get("is_quant"): missing_elements.append("numerical percentage impact (%)")
+    if not initial_breakdown.get("has_causal"): missing_elements.append("causal reasoning")
     
     repair_instruction = f"""
     The previous response is mostly correct, but is missing: {', '.join(missing_elements)}.
-
-    Only improve these specific aspects. 
-    Do NOT rewrite the entire answer. 
-    Preserve existing correct reasoning and structure.
-    Add only the missing information based strictly on the provided tool data.
+    Only improve these specific aspects. Do NOT rewrite the entire answer. 
+    Preserve existing correct reasoning. Add missing info based strictly on tool data.
     """
     
     retry_messages = [
@@ -106,6 +100,8 @@ def generate_validated_response(input_data: dict) -> str:
     ]
     
     final_output = initial_draft
+    final_score = initial_score
+
     try:
         retry_res = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -114,23 +110,43 @@ def generate_validated_response(input_data: dict) -> str:
         )
         improved_draft = str(retry_res.choices[0].message.content)
         
-        # 5. MERGE STRATEGY (TASK 3)
+        # 5. REGRESSION-SAFE MERGE LOGIC (TASK 1-4)
         retry_eval = evaluate_response(improved_draft)
         retry_score = retry_eval.get("score", 0.0)
+        retry_breakdown = retry_eval.get("details", {})
         
+        improved = False
         if retry_score > initial_score:
-            print(f"[CORRECTION] improved=True (Initial={initial_score}, Improved={retry_score})")
+            improved = True
+        elif retry_score == initial_score:
+            # Check for additive content improvement even if score capped
+            added_info = (
+                (not initial_breakdown.get("has_ticker") and retry_breakdown.get("has_ticker")) or
+                (not initial_breakdown.get("is_quant") and retry_breakdown.get("is_quant")) or
+                (not initial_breakdown.get("has_causal") and retry_breakdown.get("has_causal"))
+            )
+            if added_info: improved = True
+
+        regression = (
+            (initial_breakdown.get("has_ticker") and not retry_breakdown.get("has_ticker")) or
+            (initial_breakdown.get("is_quant") and not retry_breakdown.get("is_quant")) or
+            (initial_breakdown.get("has_causal") and not retry_breakdown.get("has_causal"))
+        )
+
+        if improved and not regression:
+            print(f"[MERGE] improved=True, regression=False (Score: {initial_score} -> {retry_score})")
             final_output = improved_draft
             final_score = retry_score
         else:
-            print(f"[CORRECTION] improved=False (Discarding retry, keeping original score {initial_score})")
+            print(f"[MERGE] improved={improved}, regression={regression} (Rejecting repair, keeping original)")
             final_score = initial_score
-    except:
+    except Exception as e:
+        print(f"[MERGE] Logic fault: {e}")
         final_score = initial_score
 
-    # 6. FINAL DECISION & FALLBACK
+    # 6. FINAL DECISION
     if final_score < 5.0:
-        return "I'm missing some required depth to provide a high-confidence advisory. Please refine your query or check available data."
+        return "I'm missing some required depth to provide a high-confidence advisory. Please clarify your query."
 
     # 7. SOFT IMPROVEMENT LAYER
     if 5.0 <= final_score < 6.5:
@@ -144,7 +160,6 @@ def stream_final_response(user_query: str, intents: List[str], portfolio_id: str
         "tool_outputs": tool_outputs if isinstance(tool_outputs, dict) else {},
         "memory": memory_context
     }
-    
     final_text = generate_validated_response(input_data)
     for word in final_text.split(" "):
         yield word + " "
