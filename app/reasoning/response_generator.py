@@ -26,7 +26,7 @@ except Exception as e:
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- ADVISORY SYSTEM PROMPT ---
+# --- ADVISORY SYSTEM PROMPTS ---
 ADVISORY_SYSTEM_PROMPT = """
 You are the AlphaTrace AI Financial Copilot.
 Provide high-fidelity, evidence-based reasoning.
@@ -43,8 +43,8 @@ def guard_tool_data(tool_outputs: dict) -> bool:
 
 def generate_validated_response(input_data: dict) -> str:
     """
-    DIAGNOSTIC RETRY ARCHITECTURE:
-    generate -> evaluate -> diagnostic retry -> evaluate -> block
+    SELECTIVE REPAIR ARCHITECTURE:
+    generate -> evaluate -> targeted repair -> merge -> final
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -66,72 +66,77 @@ def generate_validated_response(input_data: dict) -> str:
             messages=messages,
             temperature=0.1
         )
-        current_draft = str(response.choices[0].message.content)
+        initial_draft = str(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"Generation failure: {e}")
         return "Connection fault in reasoning engine."
 
     # 3. INITIAL EVALUATION
-    eval_result = evaluate_response(current_draft)
+    eval_result = evaluate_response(initial_draft)
     initial_score = eval_result.get("score", 0.0)
     breakdown = eval_result.get("details", {})
-    print(f"[EVALUATOR] initial_score={initial_score}")
+    
+    # Bypass repair if already institutional grade
+    if initial_score >= 6.5:
+        print(f"[EVALUATOR] score={initial_score} (Bypassing repair)")
+        return initial_draft
 
-    final_score = initial_score
+    print(f"[EVALUATOR] initial_score={initial_score} (Triggering selective repair)")
 
-    # 4. DIAGNOSTIC RETRY (TASK 2 & 3)
-    if initial_score < 5.0:
-        # Build Targeted Feedback
-        feedback_items = []
-        if not breakdown.get("has_ticker"): feedback_items.append("Include specific stock tickers from the tool data (e.g. HDFCBANK, TCS)")
-        if not breakdown.get("is_quant"): feedback_items.append("Include numerical percentage impact analysis (%)")
-        if not breakdown.get("is_causal"): feedback_items.append("Strengthen the causal reasoning by explicitly linking news drivers to stock/sector impact")
-        
-        diagnostic_feedback = "\n".join([f"- {item}" for item in feedback_items]) if feedback_items else "- Ensure objective, data-grounded reasoning"
-        
-        retry_prompt = f"""
-        Your previous response scored {initial_score}/10 on our institutional fidelity scale.
+    # 4. SELECTIVE REPAIR (TASK 1 & 2)
+    missing_elements = []
+    if not breakdown.get("has_ticker"): missing_elements.append("specific stock tickers (e.g. HDFCBANK)")
+    if not breakdown.get("is_quant"): missing_elements.append("numerical percentage impact (%)")
+    if not breakdown.get("has_causal"): missing_elements.append("causal reasoning (linking drivers to impact)")
+    
+    repair_instruction = f"""
+    The previous response is mostly correct, but is missing: {', '.join(missing_elements)}.
 
-        DETECTED WEAKNESSES:
-        {diagnostic_feedback}
+    Only improve these specific aspects. 
+    Do NOT rewrite the entire answer. 
+    Preserve existing correct reasoning and structure.
+    Add only the missing information based strictly on the provided tool data.
+    """
+    
+    retry_messages = [
+        {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Data: {json.dumps(input_data['tool_outputs'])}"},
+        {"role": "assistant", "content": initial_draft},
+        {"role": "user", "content": repair_instruction}
+    ]
+    
+    final_output = initial_draft
+    try:
+        retry_res = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=retry_messages,
+            temperature=0.0
+        )
+        improved_draft = str(retry_res.choices[0].message.content)
+        
+        # 5. MERGE STRATEGY (TASK 3)
+        retry_eval = evaluate_response(improved_draft)
+        retry_score = retry_eval.get("score", 0.0)
+        
+        if retry_score > initial_score:
+            print(f"[CORRECTION] improved=True (Initial={initial_score}, Improved={retry_score})")
+            final_output = improved_draft
+            final_score = retry_score
+        else:
+            print(f"[CORRECTION] improved=False (Discarding retry, keeping original score {initial_score})")
+            final_score = initial_score
+    except:
+        final_score = initial_score
 
-        Rewrite the response by fixing ONLY these issues. 
-        Use ONLY the provided tool data. Do NOT invent numbers or assume performance if not present.
-        """
-        
-        print(f"[GUARDRAIL] Triggering DIAGNOSTIC RETRY (Weaknesses: {len(feedback_items)} item(s))")
-        
-        retry_messages = [
-            {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Query: {input_data['user_query']}\nData: {json.dumps(input_data['tool_outputs'])}"},
-            {"role": "assistant", "content": current_draft},
-            {"role": "user", "content": retry_prompt}
-        ]
-        
-        try:
-            retry_res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=retry_messages,
-                temperature=0.0
-            )
-            current_draft = str(retry_res.choices[0].message.content)
-            
-            # Re-evaluate
-            retry_eval = evaluate_response(current_draft)
-            final_score = retry_eval.get("score", 0.0)
-            print(f"[EVALUATOR] retry_score={final_score}")
-        except:
-            print("[FATAL] Diagnostic retry loop crashed.")
-
-    # 5. FINAL DECISION
+    # 6. FINAL DECISION & FALLBACK
     if final_score < 5.0:
-        return "I don't have enough reliable signals to formulate a precise advisory. Please clarify the sector or portfolio you're analyzing."
+        return "I'm missing some required depth to provide a high-confidence advisory. Please refine your query or check available data."
 
-    # 6. SOFT IMPROVEMENT LAYER
+    # 7. SOFT IMPROVEMENT LAYER
     if 5.0 <= final_score < 6.5:
-        current_draft += "\n\n(This analysis is based on limited signals and may not capture the full picture.)"
+        final_output += "\n\n(This analysis is based on limited signals and may not capture the full picture.)"
 
-    return current_draft
+    return final_output
 
 def stream_final_response(user_query: str, intents: List[str], portfolio_id: str, tool_outputs: dict, memory_context: dict):
     input_data = {
