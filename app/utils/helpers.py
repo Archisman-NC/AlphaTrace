@@ -16,11 +16,16 @@ def safe_float(x):
     except:
         return 0.0
 
-def safe_slice(x, k=3, reverse=False):
-    """Hardened sequence slicing: No crashes."""
-    if not isinstance(x, list):
-        return []
-    return x[-k:] if reverse else x[:k]
+def safe_slice(x, n=3):
+    """
+    Safely slice lists without breaking non-list inputs.
+    """
+    try:
+        if isinstance(x, list):
+            return x[:n]
+        return x
+    except Exception:
+        return x
 
 def build_stock_to_sector_map(data):
     """

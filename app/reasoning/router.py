@@ -2,7 +2,19 @@ import logging
 import os
 from typing import Dict, List, Any
 # Standardized Imports
-from app.utils.helpers import safe_slice, safe_float
+try:
+    from app.utils.helpers import safe_slice, safe_float
+except Exception:
+    def safe_slice(x, n=3):
+        try:
+            if isinstance(x, list):
+                return x[:n]
+            return x
+        except Exception:
+            return x
+    def safe_float(x):
+        try: return float(x)
+        except: return 0.0
 
 # Analytical Components
 from app.ingestion.data_loader import DataLoader
