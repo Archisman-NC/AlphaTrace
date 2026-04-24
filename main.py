@@ -101,7 +101,7 @@ with st.sidebar:
         exposure = metrics.get("sector_exposure", {})
         if exposure:
             df_exp = pd.DataFrame(list(exposure.items()), columns=["Sector", "Allocation"])
-            df_exp["Allocation"] = df_exp["Allocation"].apply(lambda x: float(x) if x else 0)
+            df_exp["Allocation"] = df_exp["Allocation"].apply(lambda x: float(x) if x else 0.0)
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
             # Fix 9: Streamlit stretch layout
@@ -169,7 +169,7 @@ if st.session_state.pending_prompt:
                         st.markdown(f"\n\n{st.session_state.proactive_metadata['text']}")
                         final_res += f"\n\n{st.session_state.proactive_metadata['text']}"
 
-                    final_brief = polish_response(final_res, validation["validated_intent"], {}, validation["confidence"])
+                    final_brief = polish_response(final_res, validation.get("validated_intent", ["full_analysis"]), {}, validation.get("confidence", 0.5))
                     memory_obj = normalize_memory_turn(st.session_state.current_portfolio, active_prompt, validation["validated_intent"], final_brief, tool_data)
                     st.session_state.memory.append(memory_obj)
                     st.session_state.messages.append({"role": "assistant", "content": final_brief})
