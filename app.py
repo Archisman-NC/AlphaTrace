@@ -76,7 +76,7 @@ def get_alpha_trace_response(user_input: str) -> str:
             tool_data[result["type"]] = result["data"]
 
         # Step 4: Narrative Synthesis
-        response = generate_advisory_response(
+        raw_response = generate_advisory_response(
             resolved_query,
             validation["validated_intent"],
             execution_results["portfolio_id"],
@@ -84,10 +84,19 @@ def get_alpha_trace_response(user_input: str) -> str:
             {"risk_tolerance": "high", "experience_level": "advanced"} # Mock profile
         )
         
+        # Step 5: Premium Polish (Hybrid Strategy)
+        from app.reasoning.response_polisher import polish_response
+        final_response = polish_response(
+            raw_response, 
+            validation["validated_intent"], 
+            {"risk_tolerance": "high", "experience_level": "advanced"},
+            validation["confidence"]
+        )
+
         # Save analysis for next turn context
-        st.session_state.last_analysis = {"summary": response}
+        st.session_state.last_analysis = {"summary": final_response}
         
-        return response
+        return final_response
 
     except Exception as e:
         logger.error(f"Reasoning Pipeline Error: {e}")

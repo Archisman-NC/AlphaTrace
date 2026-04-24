@@ -5,3 +5,4 @@ langfuse
 pytest
 gradio
 streamlit
+openai
