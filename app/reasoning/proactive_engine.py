@@ -12,12 +12,20 @@ PREFIXES = [
     "From your recent data —"
 ]
 
+IMPACT_PHRASES = [
+    "which could signal a structural shift",
+    "which may increase downside risk",
+    "which may require closer monitoring",
+    "which could affect portfolio stability",
+    "which may impact your sector alignment"
+]
+
 def generate_proactive_insight(tool_data: dict, user_query: str, session_memory: list = None, last_topic: str = None) -> Optional[dict]:
     """
-    Advanced Proactive Engine:
+    Final Refined Proactive Engine:
+    - Diversified Impact Clauses
+    - Short + Sharp Delivery
     - Weighted Prioritization
-    - Impact Injection ("Why this matters")
-    - Anti-Template Generation
     """
     full_analysis = tool_data.get("full_analysis", {})
     reason_results = tool_data.get("reason", {})
@@ -36,8 +44,7 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
                 "severity": severity,
                 "topic": f"concentration_{sector}",
                 "data": {"sector": sector, "alloc": alloc},
-                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%).",
-                "impact": "This concentration increases your sensitivity to sector-specific volatility."
+                "msg": f"Your portfolio is heavily concentrated in {sector} ({alloc:.1f}%)."
             })
 
     # 2. Divergence Check (Weight 2)
@@ -54,8 +61,7 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
                 "severity": severity,
                 "topic": f"divergence_{h.get('ticker')}",
                 "data": {"ticker": h.get("ticker"), "sector": h.get("sector")},
-                "msg": f"{h.get('ticker')} is decoupling from the {h.get('sector')} sector trends.",
-                "impact": "This divergence may indicate a fundamental shift or unique risk in this holding."
+                "msg": f"{h.get('ticker')} is decoupling from the {h.get('sector')} sector trends."
             })
 
     # 3. Conflict Check (Weight 2)
@@ -66,8 +72,7 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
             "weight": 2,
             "severity": "medium",
             "topic": "price_news_mismatch",
-            "msg": "I've detected a mismatch between positive sentiment and price action in some holdings.",
-            "impact": "This conflict often signals hidden selling pressure or market skepticism."
+            "msg": "I've detected a mismatch between positive sentiment and price action in your holdings."
         })
 
     if not potential_triggers:
@@ -86,19 +91,19 @@ def generate_proactive_insight(tool_data: dict, user_query: str, session_memory:
     # NARRATIVE CONSTRUCTION
     icon = "⚠️" if selected["severity"] == "high" else "ℹ️"
     prefix = random.choice(PREFIXES)
+    impact_clause = random.choice(IMPACT_PHRASES)
     body = selected["msg"]
-    impact = selected["impact"]
     
     # MEMORY BRIDGING
     bridge = ""
     if session_memory and len(session_memory) > 0:
         last_turn = session_memory[-1]
         if selected["type"] == "concentration" and selected["data"]["sector"] in [d.get("sector") for d in last_turn.get("drivers", [])]:
-            bridge = f" This reinforces the {selected['data']['sector']} focus we analyzed earlier."
+            bridge = f" This reinforces the {selected['data']['sector']} focus we discussed."
         elif selected["type"] == "divergence" and selected["data"]["ticker"] in last_turn.get("user_query", ""):
             bridge = " This adds context to the ticker move we were just looking at."
 
-    final_text = f"{icon} {prefix} {body} {impact}{bridge} Want a deep dive investigation?"
+    final_text = f"{icon} {prefix} {body} {impact_clause}.{bridge} Want a deep dive?"
 
     follow_up_map = {
         "concentration": f"Analyze rebalancing for {selected['data'].get('sector')} heavy exposure",
