@@ -12,27 +12,12 @@ from app.evaluation.llm_evaluator import evaluate_response
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- ADAPTIVE RESPONSE ARCHITECTURE (Part 1 & 2) ---
+# --- ADAPTIVE RESPONSE ARCHITECTURE ---
 STRUCTURES = {
-    "FULL_ANALYSIS": [
-        "### 1. Key Insight",
-        "### 2. Top Drivers",
-        "### 3. Risks",
-        "### 4. Actions"
-    ],
-    "EXPLANATION": [
-        "### Explanation",
-        "### Key Factors"
-    ],
-    "COMPARISON": [
-        "### Comparison",
-        "### Pros",
-        "### Cons",
-        "### Recommendation"
-    ],
-    "GENERAL": [
-        "### Response"
-    ]
+    "FULL_ANALYSIS": "Use a structured format with sections for ### Key Insight, ### Top Drivers, ### Risks, and ### Actions.",
+    "EXPLANATION": "Use a natural, paragraph-based format with clear, data-backed reasoning. Avoid rigid bullet points.",
+    "COMPARISON": "Identify clear differences using ### Comparison, ### Pros, ### Cons, and ### Recommendation.",
+    "GENERAL": "Provide a direct, concise response based on available data."
 }
 
 def classify_query(query: str) -> str:
@@ -47,33 +32,30 @@ def classify_query(query: str) -> str:
     else:
         return "GENERAL"
 
-def validate_structure(response: str, structure: list):
-    """Diagnostic check for structural completeness."""
-    for section in structure:
-        if section not in response:
-            print(f"[WARN] Structural anomaly detected. Missing section: {section}")
+def validate_structure(response: str, intent: str):
+    """Informal check to ensure analysis queries maintain structure."""
+    if intent == "FULL_ANALYSIS" and "###" not in response:
+        print(f"[WARN] Analysis intent detected but structure is missing.")
 
-# --- ADVISORY SYSTEM PROMPT (Part 3 & 6) ---
+# --- ADVISORY SYSTEM PROMPT ---
 ADVISORY_SYSTEM_PROMPT = """
-You are the AlphaTrace AI Financial Intelligence Engine. Your role is STRICTLY limited to professionally EXPLAINING and EXPANDING the pre-computed signals provided by the system.
+You are the AlphaTrace AI Financial Analyst. You deliver sharp, data-driven intelligence WITHOUT exception.
 
-STRICT DETERMINISTIC RULES:
-1. NO INDEPENDENT INSIGHTS: You are NOT authorized to identify or generate your own 'Key Insight', 'Drivers', or 'Risks'.
-2. EXACT ADHERENCE: Use the pre-computed signals provided in the data payload exactly. You must not override or replace them.
-3. NO GENERALIZATION: Do NOT dilute granular ticker-level signals into vague sector summaries. Maintain the specificity of the provided drivers.
-4. ROLE: Your function is solely to EXPLAIN, EXPAND, and STRUCTURE the system's mathematical ground truth into the required narrative format.
+CORE SIGNAL RULES:
+You are provided with pre-computed signals (key_insight, top_drivers, risks).
+1. STRICT FIDELITY: Use these signals EXACTLY. Do not invent new insights or ignore provided drivers.
+2. NO GENERALIZATION: Avoid generic sector summaries (e.g., "The sector shows diversification"). 
+3. ANALYST PERSONA: Be sharp, decisive, and explain the "So What?" for every data point.
 
-STRICT STRUCTURE COMPLIANCE:
-You MUST follow ONLY the structure provided below.
-Do NOT skip sections, add new sections, or reorder sections.
+FLEXIBLE STRUCTURE RULE:
+Structure your response according to the following intended format:
+{structure_guideline}
 
-STRUCTURE:
-{structure}
-
-HARD RULES:
-1. NO HEDGING: BANNED WORDS: "appears", "may", "suggests", "could", "likely". Use confident, evidence-based language.
-2. DATA MINIMUMS: Use at least 2 tickers and 1 numeric percentage in every response.
-3. FIDELITY ANCHOR: Your narrative must be a 100% localized expansion of the system's prioritized signals.
+OUTPUT QUALITY RULES:
+1. DECISIVE LANGUAGE: BANNED WORDS: "appears", "may", "suggests", "could", "likely".
+   Use: "is driving", "is impacting", "is the primary reason", "has triggered".
+2. DATA MINIMUMS: Every response MUST include at least 1-2 tickers and numeric values (% or weight).
+3. PRIORITIZE: Focus only on what the system identifies as the most important drivers or risks.
 """
 
 def guard_tool_data(tool_outputs: dict) -> bool:
@@ -106,17 +88,16 @@ def generate_validated_response(input_data: dict) -> str:
     except:
         return "Synthesis engine is currently offline."
 
-    # 1. INTENT & STRUCTURE SELECTION (Part 4 & 7)
+    # 1. INTENT & STRUCTURE SELECTION
     user_query = input_data.get("user_query", "")
     intent = classify_query(user_query)
-    structure_list = STRUCTURES.get(intent, STRUCTURES["GENERAL"])
-    structure_str = "\n".join(structure_list)
+    structure_guideline = STRUCTURES.get(intent, STRUCTURES["GENERAL"])
     
     print(f"[INTENT] {intent}")
-    print(f"[STRUCTURE] {structure_list}")
+    print(f"[STRUCTURE] {structure_guideline}")
 
-    # 2. INITIAL GENERATION (Part 3)
-    dynamic_system_prompt = ADVISORY_SYSTEM_PROMPT.format(structure=structure_str)
+    # 2. INITIAL GENERATION
+    dynamic_system_prompt = ADVISORY_SYSTEM_PROMPT.format(structure_guideline=structure_guideline)
     
     messages = [
         {"role": "system", "content": dynamic_system_prompt},
@@ -141,7 +122,7 @@ def generate_validated_response(input_data: dict) -> str:
     print(f"[EVAL] score={initial_score}")
     
     # Check for structural anomalies early
-    validate_structure(initial_draft, structure_list)
+    validate_structure(initial_draft, intent)
 
     # Bypass repair if already institutional grade
     if initial_score >= 6.0:
@@ -156,9 +137,8 @@ def generate_validated_response(input_data: dict) -> str:
         
         repair_instruction = f"""
         The previous response is missing mandatory elements: {', '.join(missing_elements)}.
-        Improve these aspects while strictly following the required structure.
+        Improve these aspects while strictly following the required guideline: {structure_guideline}
         Do NOT rewrite the entire answer. 
-        STRUCTURE: {structure_str}
         """
         
         retry_messages = [
