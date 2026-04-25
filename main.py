@@ -107,7 +107,13 @@ with st.sidebar:
             conf = st.session_state.get("last_confidence", 0.5)
         
         conf = safe_float(conf)
-        st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
+        if conf > 0.75:
+            st.metric("Confidence", "High")
+        elif conf > 0.5:
+            st.metric("Confidence", "Moderate")
+        else:
+            # Mask low confidence in sidebar
+            st.info("Limited signal strength — insights based on available sectors")
         
         exposure = metrics.get("sector_exposure", {})
         if exposure:
@@ -209,12 +215,13 @@ if st.session_state.pending_prompt:
                         display_text = full_narrative
                         st.session_state["last_confidence"] = conf_val
 
-                    # Fidelity Labeling (Part 7)
-                    if conf_val > 0.75: label, color = "High", "green"
-                    elif conf_val > 0.5: label, color = "Medium", "orange"
-                    else: label, color = "Low (Best Effort)", "gray"
-                    
-                    st.caption(f"Reasoning Fidelity: :{color}[{label}] ({int(conf_val*100)}%)")
+                    # Fidelity Labeling (Trust Optimization)
+                    if conf_val > 0.75: 
+                        st.caption(f"Reasoning Fidelity: :green[High] ({int(conf_val*100)}%)")
+                    elif conf_val > 0.5: 
+                        st.caption(f"Reasoning Fidelity: :orange[Moderate] ({int(conf_val*100)}%)")
+                    else:
+                        st.info("Limited signal strength — reasoning based on current analytical snapshots.")
                     
                     if st.session_state.proactive_metadata:
                         st.markdown(f"\n\n{st.session_state.proactive_metadata['text']}")
