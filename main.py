@@ -1,14 +1,15 @@
 import os
 import sys
 
+# --- Path Stabilization Sentinel (Part 1) ---
+ROOT = os.path.dirname(os.path.abspath(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
 # --- Disable Problematic Hot-Reload (Part 1) ---
 os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
 
-# --- Import Stability Debug (Part 6) ---
 print("🚀 STABLE IMPORT MODE ACTIVE")
-
-# --- Path Stabilization Sentinel (Step 4) ---
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import json
 import logging
@@ -19,28 +20,32 @@ import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 
-# AlphaTrace Core Imports (Part 2)
+# Base Utilities (Safe to keep at top)
 from app.utils.helpers import safe_float
 
-# --- Global Import Shield ---
-try:
-    from app.evaluation.llm_evaluator import evaluate_response
-except Exception:
-    def evaluate_response(*args, **kwargs): return {"score": 7.0, "confidence": 0.5, "details": {}}
-
-try:
-    from app.reasoning.proactive_engine import generate_proactive_insight
-except Exception:
-    def generate_proactive_insight(*args, **kwargs): return None
-
-# Reasoning & Synthesis
-from app.reasoning.context_resolver import resolve_context
+# --- Direct Core Imports (Removing shields) ---
+from app.evaluation.llm_evaluator import evaluate_response
+from app.reasoning.proactive_engine import generate_proactive_insight
 from app.reasoning.intent_classifier import classify_intent
 from app.reasoning.intent_validator import validate_and_route
-from app.reasoning.router import execute_intents
-from app.reasoning.response_generator import stream_final_response
-from app.reasoning.response_polisher import polish_response
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
+
+# --- Lazy-Load Wrappers (Part 3) ---
+def get_resolve_context():
+    from app.reasoning.context_resolver import resolve_context
+    return resolve_context
+
+def get_execute_intents():
+    from app.reasoning.router import execute_intents
+    return execute_intents
+
+def get_stream_final_response():
+    from app.reasoning.response_generator import stream_final_response
+    return stream_final_response
+
+def get_polish_response():
+    from app.reasoning.response_polisher import polish_response
+    return polish_response
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -105,8 +110,8 @@ with st.sidebar:
             df_exp["Allocation"] = df_exp["Allocation"].apply(safe_float)
             fig = px.pie(df_exp, values="Allocation", names="Sector", hole=0.4, height=180)
             fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
-            # Fix 9: Streamlit stretch layout
-            st.plotly_chart(fig, use_container_width=True)
+            # Fix 9: Streamlit stretch layout (Part 8)
+            st.plotly_chart(fig, width="stretch")
 
 # --- Chat Display ---
 for i, message in enumerate(st.session_state.messages):
@@ -136,7 +141,7 @@ if st.session_state.pending_prompt:
                 recent_mem = st.session_state.memory[::-1][:3]
                 session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                 
-                resolution = resolve_context(active_prompt, session_wrapped)
+                resolution = get_resolve_context()(active_prompt, session_wrapped)
                 classification = classify_intent(resolution["resolved_query"], resolution["portfolio_id"], recent_mem)
                 validation = validate_and_route(resolution["resolved_query"], classification)
                 
@@ -144,7 +149,7 @@ if st.session_state.pending_prompt:
                     res_path = validation.get('reason', 'Could you clarify that?')
                     st.markdown(res_path); st.session_state.messages.append({"role": "assistant", "content": res_path})
                 else:
-                    execution_results = execute_intents({
+                    execution_results = get_execute_intents()({
                         "intent": validation.get("validated_intent", ["full_analysis"]),
                         "portfolio_id": validation.get("portfolio_id", st.session_state.current_portfolio),
                         "confidence": validation.get("confidence", 0.5)
@@ -163,7 +168,7 @@ if st.session_state.pending_prompt:
                             st.session_state.last_insight_turn = len(st.session_state.memory)
 
                     # Narrative (Part 5 & 6)
-                    stream_gen = stream_final_response(resolution["resolved_query"], validation["validated_intent"], execution_results["portfolio_id"], tool_data, extract_relevant_memory(active_prompt, st.session_state.memory))
+                    stream_gen = get_stream_final_response()(resolution["resolved_query"], validation["validated_intent"], execution_results["portfolio_id"], tool_data, extract_relevant_memory(active_prompt, st.session_state.memory))
                     
                     # Capture stream output for parsing
                     full_narrative = st.write_stream(stream_gen)
@@ -188,7 +193,7 @@ if st.session_state.pending_prompt:
                         st.markdown(f"\n\n{st.session_state.proactive_metadata['text']}")
                         display_text += f"\n\n{st.session_state.proactive_metadata['text']}"
 
-                    final_brief = polish_response(display_text, validation.get("validated_intent", ["full_analysis"]), {}, conf_val)
+                    final_brief = get_polish_response()(display_text, validation.get("validated_intent", ["full_analysis"]), {}, conf_val)
                     memory_obj = normalize_memory_turn(st.session_state.current_portfolio, active_prompt, validation["validated_intent"], final_brief, tool_data)
                     st.session_state.memory.append(memory_obj)
                     st.session_state.messages.append({"role": "assistant", "content": final_brief})
