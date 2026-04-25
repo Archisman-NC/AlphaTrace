@@ -162,15 +162,36 @@ if st.session_state.pending_prompt:
                             st.session_state.last_insight_topic = proactive["topic"]
                             st.session_state.last_insight_turn = len(st.session_state.memory)
 
-                    # Narrative
+                    # Narrative (Part 5 & 6)
                     stream_gen = stream_final_response(resolution["resolved_query"], validation["validated_intent"], execution_results["portfolio_id"], tool_data, extract_relevant_memory(active_prompt, st.session_state.memory))
-                    final_res = st.write_stream(stream_gen)
+                    
+                    # Capture stream output for parsing
+                    full_narrative = st.write_stream(stream_gen)
+                    
+                    # Extract confidence metadata marker
+                    conf_val = 0.5
+                    if "__CONFIDENCE__:" in full_narrative:
+                        parts = full_narrative.split("__CONFIDENCE__:")
+                        display_text = parts[0]
+                        try:
+                            conf_val = float(parts[1].strip())
+                        except:
+                            conf_val = 0.5
+                    else:
+                        display_text = full_narrative
+
+                    # Fidelity Labeling (Part 7)
+                    if conf_val > 0.75: label, color = "High", "green"
+                    elif conf_val > 0.5: label, color = "Medium", "orange"
+                    else: label, color = "Low (Best Effort)", "gray"
+                    
+                    st.caption(f"Reasoning Fidelity: :{color}[{label}] ({int(conf_val*100)}%)")
                     
                     if st.session_state.proactive_metadata:
                         st.markdown(f"\n\n{st.session_state.proactive_metadata['text']}")
-                        final_res += f"\n\n{st.session_state.proactive_metadata['text']}"
+                        display_text += f"\n\n{st.session_state.proactive_metadata['text']}"
 
-                    final_brief = polish_response(final_res, validation.get("validated_intent", ["full_analysis"]), {}, validation.get("confidence", 0.5))
+                    final_brief = polish_response(display_text, validation.get("validated_intent", ["full_analysis"]), {}, conf_val)
                     memory_obj = normalize_memory_turn(st.session_state.current_portfolio, active_prompt, validation["validated_intent"], final_brief, tool_data)
                     st.session_state.memory.append(memory_obj)
                     st.session_state.messages.append({"role": "assistant", "content": final_brief})

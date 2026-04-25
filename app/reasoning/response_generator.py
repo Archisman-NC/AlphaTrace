@@ -144,59 +144,73 @@ def generate_validated_response(input_data: dict) -> str:
 
     # Bypass repair if already institutional grade
     if initial_score >= 6.0:
-        return initial_draft
-
-    # 4. SELECTIVE REPAIR
-    missing_elements = []
-    if not initial_breakdown.get("has_ticker"): missing_elements.append("specific stock tickers")
-    if not initial_breakdown.get("is_quant"): missing_elements.append("numerical percentage impact (%)")
-    if not initial_breakdown.get("has_causal"): missing_elements.append("causal reasoning")
-    
-    repair_instruction = f"""
-    The previous response is missing mandatory elements: {', '.join(missing_elements)}.
-    Improve these aspects while strictly following the required structure.
-    Do NOT rewrite the entire answer. 
-    STRUCTURE: {structure_str}
-    """
-    
-    retry_messages = [
-        {"role": "system", "content": dynamic_system_prompt},
-        {"role": "user", "content": f"Data: {json.dumps(input_data['tool_outputs'])}"},
-        {"role": "assistant", "content": initial_draft},
-        {"role": "user", "content": repair_instruction}
-    ]
-    
-    final_output = initial_draft
-    final_score = initial_score
-
-    try:
-        retry_res = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=retry_messages,
-            temperature=0.0
-        )
-        improved_draft = str(retry_res.choices[0].message.content)
+        final_output = initial_draft
+        final_score = initial_score
+    else:
+        # 4. SELECTIVE REPAIR
+        missing_elements = []
+        if not initial_breakdown.get("has_ticker"): missing_elements.append("specific stock tickers")
+        if not initial_breakdown.get("is_quant"): missing_elements.append("numerical percentage impact (%)")
+        if not initial_breakdown.get("has_causal"): missing_elements.append("causal reasoning")
         
-        retry_eval = evaluate_response(improved_draft)
-        retry_score = retry_eval.get("score", 0.0)
+        repair_instruction = f"""
+        The previous response is missing mandatory elements: {', '.join(missing_elements)}.
+        Improve these aspects while strictly following the required structure.
+        Do NOT rewrite the entire answer. 
+        STRUCTURE: {structure_str}
+        """
         
-        print(f"[EVAL-RETRY] score={retry_score}")
+        retry_messages = [
+            {"role": "system", "content": dynamic_system_prompt},
+            {"role": "user", "content": f"Data: {json.dumps(input_data['tool_outputs'])}"},
+            {"role": "assistant", "content": initial_draft},
+            {"role": "user", "content": repair_instruction}
+        ]
+        
+        final_output = initial_draft
+        final_score = initial_score
 
-        if retry_score > initial_score:
-            final_output = improved_draft
-            final_score = retry_score
-            validate_structure(final_output, structure_list)
-    except Exception as e:
-        print(f"[MERGE] Logic fault: {e}")
+        try:
+            retry_res = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=retry_messages,
+                temperature=0.0
+            )
+            improved_draft = str(retry_res.choices[0].message.content)
+            
+            retry_eval = evaluate_response(improved_draft)
+            retry_score = retry_eval.get("score", 0.0)
+            
+            print(f"[EVAL-RETRY] score={retry_score}")
 
-    # 5. FINAL DECISION
+            if retry_score > initial_score:
+                final_output = improved_draft
+                final_score = retry_score
+                validate_structure(final_output, structure_list)
+        except Exception as e:
+            print(f"[MERGE] Logic fault: {e}")
+
+    # 5. FINAL DECISION (Part 2 & 4)
+    # Calculate confidence from final score (0-10 -> 0.0-1.0)
+    confidence = min(max(final_score / 10.0, 0.0), 1.0) if final_score is not None else 0.5
+    
+    # Debug (Part 6)
+    print(f"[EVAL SCORE] {final_score}")
+    print(f"[CONFIDENCE] {confidence}")
+
     if final_score < 4.0:
-        return generate_fallback_analysis(input_data)
+        return {
+            "text": generate_fallback_analysis(input_data),
+            "confidence": confidence
+        }
 
     if 4.0 <= final_score < 6.0:
         final_output += "\n\n(Note: This analysis provides a high-level view based on prioritized signals.)"
 
-    return final_output
+    return {
+        "text": final_output,
+        "confidence": confidence
+    }
 
 def stream_final_response(user_query: str, intents: List[str], portfolio_id: str, tool_outputs: dict, memory_context: dict):
     input_data = {
@@ -204,7 +218,18 @@ def stream_final_response(user_query: str, intents: List[str], portfolio_id: str
         "tool_outputs": tool_outputs if isinstance(tool_outputs, dict) else {},
         "memory": memory_context
     }
-    final_text = generate_validated_response(input_data)
+    # Resolve structured return (Part 3)
+    response_payload = generate_validated_response(input_data)
+    final_text = response_payload.get("text", "")
+    final_conf = response_payload.get("confidence", 0.5)
+    
+    # Store confidence in session state if possible (Streamlit side)
+    # For streaming, we yield words, but we can yield the confidence metadata at the end or use a shared state.
+    # We will yield a special metadata marker if needed, or simply let main.py call generate_validated_response directly.
+    
     for word in final_text.split(" "):
         yield word + " "
         time.sleep(0.04)
+    
+    # Yield confidence as a terminal marker
+    yield f"__CONFIDENCE__:{final_conf}"
