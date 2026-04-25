@@ -12,29 +12,28 @@ from app.evaluation.llm_evaluator import evaluate_response
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- ADAPTIVE RESPONSE ARCHITECTURE ---
 STRUCTURES = {
-    "FULL_ANALYSIS": "Use a structured format with sections for ### Key Insight, ### Top Drivers, ### Risks, and ### Actions.",
-    "EXPLANATION": "Use a natural, paragraph-based format with clear, data-backed reasoning. Avoid rigid bullet points.",
-    "COMPARISON": "Identify clear differences using ### Comparison, ### Pros, ### Cons, and ### Recommendation.",
-    "GENERAL": "Provide a direct, concise response based on available data."
+    "full_analysis": "Use a structured format with sections for ### 1. Key Insight, ### 2. Top Drivers, ### 3. Risks, and ### 4. Recommended Actions.",
+    "explanation": "Use a natural, paragraph-based format with clear, data-backed reasoning. Avoid rigid section headers.",
+    "comparison": "Identify clear differences using ### Comparison, ### Pros, ### Cons, and ### Final Verdict.",
+    "advice": "Provide concise, actionable financial suggestions. Use bullet points for steps.",
+    "general": "Provide a direct, context-aware response based on the provided data."
 }
 
-def classify_query(query: str) -> str:
-    """Lightweight intent classifier for structural selection."""
-    q = str(query).lower()
-    if any(x in q for x in ["analyze", "portfolio", "review", "status", "check"]):
-        return "FULL_ANALYSIS"
-    elif any(x in q for x in ["why", "explain", "reason", "because", "how"]):
-        return "EXPLANATION"
-    elif any(x in q for x in ["compare", "vs", "versus", "which is better", "difference"]):
-        return "COMPARISON"
-    else:
-        return "GENERAL"
+def get_structure_guideline(intents: List[str]) -> str:
+    """Selects the structure guideline based on dominant intent."""
+    if not intents: return STRUCTURES["general"]
+    
+    # Priority order for structure
+    for key in ["full_analysis", "explanation", "comparison", "advice"]:
+        if key in intents:
+            return STRUCTURES[key]
+    
+    return STRUCTURES["general"]
 
 def validate_structure(response: str, intent: str):
     """Informal check to ensure analysis queries maintain structure."""
-    if intent == "FULL_ANALYSIS" and "###" not in response:
+    if intent == "full_analysis" and "###" not in response:
         print(f"[WARN] Analysis intent detected but structure is missing.")
 
 # --- ADVISORY SYSTEM PROMPT ---
@@ -78,7 +77,7 @@ def generate_fallback_analysis(input_data: dict) -> str:
         "immediate technical hazards were detected in this reasoning turn."
     )
 
-def generate_validated_response(input_data: dict) -> str:
+def generate_validated_response(input_data: dict, intents: List[str]) -> dict:
     """
     ADAPTIVE RESPONSE PIPELINE:
     intent -> structure -> generate -> evaluate -> repair -> validate
@@ -86,22 +85,21 @@ def generate_validated_response(input_data: dict) -> str:
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except:
-        return "Synthesis engine is currently offline."
+        return {"text": "Synthesis engine is currently offline.", "confidence": 0.0}
 
-    # 1. INTENT & STRUCTURE SELECTION
+    # 1. STRUCTURE SELECTION (Part 3 & 4)
     user_query = input_data.get("user_query", "")
-    intent = classify_query(user_query)
-    structure_guideline = STRUCTURES.get(intent, STRUCTURES["GENERAL"])
+    structure_guideline = get_structure_guideline(intents)
     
-    print(f"[INTENT] {intent}")
-    print(f"[STRUCTURE] {structure_guideline}")
+    print(f"[INTENTS] {intents}")
+    print(f"[GUIDELINE] {structure_guideline}")
 
     # 2. INITIAL GENERATION
     dynamic_system_prompt = ADVISORY_SYSTEM_PROMPT.format(structure_guideline=structure_guideline)
     
     messages = [
         {"role": "system", "content": dynamic_system_prompt},
-        {"role": "user", "content": f"Query: {user_query}\nData: {json.dumps(input_data['tool_outputs'])}"}
+        {"role": "user", "content": f"USER QUESTION: {user_query}\n\nSTRICT DATA SIGNALS: {json.dumps(input_data['tool_outputs'])}"}
     ]
     try:
         response = client.chat.completions.create(
@@ -112,7 +110,7 @@ def generate_validated_response(input_data: dict) -> str:
         initial_draft = str(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"Generation failure: {e}")
-        return "Connection fault in reasoning engine."
+        return {"text": "Connection fault in reasoning engine.", "confidence": 0.0}
 
     # 3. INITIAL EVALUATION
     eval_result = evaluate_response(initial_draft)
@@ -122,7 +120,7 @@ def generate_validated_response(input_data: dict) -> str:
     print(f"[EVAL] score={initial_score}")
     
     # Check for structural anomalies early
-    validate_structure(initial_draft, intent)
+    validate_structure(initial_draft, intents[0] if intents else "general")
 
     # Bypass repair if already institutional grade
     if initial_score >= 6.0:
@@ -200,7 +198,7 @@ def stream_final_response(user_query: str, intents: List[str], portfolio_id: str
         "memory": memory_context
     }
     # Resolve structured return (Part 3)
-    response_payload = generate_validated_response(input_data)
+    response_payload = generate_validated_response(input_data, intents)
     final_text = response_payload.get("text", "")
     final_conf = response_payload.get("confidence", 0.5)
     
