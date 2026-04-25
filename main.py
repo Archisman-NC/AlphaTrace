@@ -101,7 +101,12 @@ with st.sidebar:
         for tool_res in data.values():
             if isinstance(tool_res, dict): metrics.update(tool_res.get("metrics", {}))
         
-        conf = data.get("global_metrics", {}).get("confidence", 0.1)
+        # Resolve Tiered Confidence (Parts 1-5)
+        conf = data.get("global_metrics", {}).get("confidence")
+        if conf is None:
+            conf = st.session_state.get("last_confidence", 0.5)
+        
+        conf = safe_float(conf)
         st.metric("Confidence", f"{conf:.2f} ({interpret_conf(conf)})")
         
         exposure = metrics.get("sector_exposure", {})
@@ -199,8 +204,10 @@ if st.session_state.pending_prompt:
                         parts = full_narrative.split("__CONFIDENCE__:")
                         display_text = parts[0]
                         conf_val = safe_float(parts[1].strip())
+                        st.session_state["last_confidence"] = conf_val
                     else:
                         display_text = full_narrative
+                        st.session_state["last_confidence"] = conf_val
 
                     # Fidelity Labeling (Part 7)
                     if conf_val > 0.75: label, color = "High", "green"
