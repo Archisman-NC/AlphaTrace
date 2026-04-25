@@ -38,23 +38,24 @@ def validate_structure(response: str, intent: str):
 
 # --- ADVISORY SYSTEM PROMPT ---
 ADVISORY_SYSTEM_PROMPT = """
-You are the AlphaTrace AI Financial Analyst. You deliver sharp, data-driven intelligence WITHOUT exception.
+You are a sharp AlphaTrace Financial Analyst.
 
-CORE SIGNAL RULES:
-You are provided with pre-computed signals (key_insight, top_drivers, risks).
-1. STRICT FIDELITY: Use these signals EXACTLY. Do not invent new insights or ignore provided drivers.
-2. NO GENERALIZATION: Avoid generic sector summaries (e.g., "The sector shows diversification"). 
-3. ANALYST PERSONA: Be sharp, decisive, and explain the "So What?" for every data point.
+Your job is to answer the USER QUESTION directly using the provided STRICT DATA SIGNALS.
 
-FLEXIBLE STRUCTURE RULE:
-Structure your response according to the following intended format:
+INSTRUCTIONS:
+1. DIRECT ANSWER: First, directly answer the user's question in 1–2 decisive sentences. 
+2. DATA SUPPORT: Then support your answer using specific data points (tickers, %, weights) from the provided signals.
+3. RELEVANCE: Only use and explain information strictly relevant to the question.
+4. ANALYST PERSONA: Be sharp and decisive. Speak like a lead analyst, not a report generator.
+5. NO REPETITION: Do NOT generate a generic portfolio summary with fixed sections unless explicitly asked or the mode is 'structured'.
+
+STYLE RULES:
+- BANNED WORDS: "appears", "may", "suggests", "could", "likely", "portfolio shows diversified exposure", "analysis reveals".
+- USE DECISIVE VERBS: "is driving", "has triggered", "is the primary reason", "is impacting".
+- DATA MINIMUMS: Every response MUST include at least 1-2 tickers and numeric values.
+
+RESPONSE MODE GUIDELINE:
 {structure_guideline}
-
-OUTPUT QUALITY RULES:
-1. DECISIVE LANGUAGE: BANNED WORDS: "appears", "may", "suggests", "could", "likely".
-   Use: "is driving", "is impacting", "is the primary reason", "has triggered".
-2. DATA MINIMUMS: Every response MUST include at least 1-2 tickers and numeric values (% or weight).
-3. PRIORITIZE: Focus only on what the system identifies as the most important drivers or risks.
 """
 
 def guard_tool_data(tool_outputs: dict) -> bool:
@@ -87,14 +88,21 @@ def generate_validated_response(input_data: dict, intents: List[str]) -> dict:
     except:
         return {"text": "Synthesis engine is currently offline.", "confidence": 0.0}
 
-    # 1. STRUCTURE SELECTION (Part 3 & 4)
+    # 1. STRUCTURE SELECTION (Part 4)
     user_query = input_data.get("user_query", "")
-    structure_guideline = get_structure_guideline(intents)
+    q_low = user_query.lower()
     
-    print(f"[INTENTS] {intents}")
+    if "analyze" in q_low or "full" in q_low:
+        mode = "structured"
+        structure_guideline = STRUCTURES.get("full_analysis")
+    else:
+        mode = "natural"
+        structure_guideline = get_structure_guideline(intents)
+
+    print(f"[MODE] {mode}")
     print(f"[GUIDELINE] {structure_guideline}")
 
-    # 2. INITIAL GENERATION
+    # 2. INITIAL GENERATION (Part 1 & 2)
     dynamic_system_prompt = ADVISORY_SYSTEM_PROMPT.format(structure_guideline=structure_guideline)
     
     messages = [
@@ -119,8 +127,9 @@ def generate_validated_response(input_data: dict, intents: List[str]) -> dict:
     
     print(f"[EVAL] score={initial_score}")
     
-    # Check for structural anomalies early
-    validate_structure(initial_draft, intents[0] if intents else "general")
+    # Check for structural anomalies only in structured mode
+    if mode == "structured":
+        validate_structure(initial_draft, intents[0] if intents else "general")
 
     # Bypass repair if already institutional grade
     if initial_score >= 6.0:
@@ -134,9 +143,10 @@ def generate_validated_response(input_data: dict, intents: List[str]) -> dict:
         if not initial_breakdown.get("has_causal"): missing_elements.append("causal reasoning")
         
         repair_instruction = f"""
-        The previous response is missing mandatory elements: {', '.join(missing_elements)}.
-        Improve these aspects while strictly following the required guideline: {structure_guideline}
-        Do NOT rewrite the entire answer. 
+        The previous response is missing mandatory data points: {', '.join(missing_elements)}.
+        Sharp and decisively incorporate these metrics while answering the USER QUESTION. 
+        Stick to the persona: decisive, data-backed, and brief.
+        Do NOT rewrite the entire answer, just fix the missing metrics.
         """
         
         retry_messages = [
