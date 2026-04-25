@@ -1,5 +1,7 @@
 import logging
+from app.utils.helpers import safe_float
 from typing import List, Dict
+from app.utils.helpers import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ def attach_sector_trends_to_news(
             enriched_item = {
                 "news": headline,
                 "sector": sector,
-                "sector_change": float(sector_change),
+                "sector_change": safe_float(sector_change),
                 "sector_sentiment": str(sector_sentiment),
                 "portfolio_exposed": is_exposed,
                 "news_sentiment": item.get("sentiment", "neutral")

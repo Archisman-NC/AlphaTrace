@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import List, Dict
 
@@ -33,7 +34,7 @@ def attach_portfolio_exposure(
             "news": item.get("news"),
             "sector": sector,
             "sector_change": item.get("sector_change", 0.0),
-            "portfolio_weight": float(portfolio_weight),
+            "portfolio_weight": safe_float(portfolio_weight),
             "sector_sentiment": item.get("sector_sentiment", "neutral"),
             "news_sentiment": item.get("news_sentiment", "neutral")
         }

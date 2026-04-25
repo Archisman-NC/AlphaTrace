@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import List, Dict, Optional
 
@@ -21,9 +22,9 @@ def rank_holdings(normalized_holdings: Dict[str, dict], top_n: Optional[int] = N
             
         ranked_list.append({
             "symbol": symbol,
-            "weight": float(weight),
+            "weight": safe_float(weight),
             "sector": data.get("sector", "UNKNOWN"),
-            "day_change": float(data.get("day_change", 0.0))
+            "day_change": safe_float(data.get("day_change", 0.0))
         })
 
     # Sort by weight descending

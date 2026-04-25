@@ -7,8 +7,8 @@ os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
 # --- Import Stability Debug (Part 6) ---
 print("🚀 STABLE IMPORT MODE ACTIVE")
 
-# --- Path Stabilization Sentinel ---
-sys.path.append(os.path.abspath("."))
+# --- Path Stabilization Sentinel (Step 4) ---
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import json
 import logging
@@ -68,7 +68,7 @@ PORTFOLIO_MAPPING = {
 
 def interpret_conf(c):
     # Fix 4: Safe confidence interpretation
-    val = float(c) if isinstance(c, (int, float)) else 0.5
+    val = safe_float(c)
     if val > 0.8: return "High"
     if val > 0.6: return "Moderate"
     return "Low"
@@ -173,10 +173,7 @@ if st.session_state.pending_prompt:
                     if "__CONFIDENCE__:" in full_narrative:
                         parts = full_narrative.split("__CONFIDENCE__:")
                         display_text = parts[0]
-                        try:
-                            conf_val = float(parts[1].strip())
-                        except:
-                            conf_val = 0.5
+                        conf_val = safe_float(parts[1].strip())
                     else:
                         display_text = full_narrative
 

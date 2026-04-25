@@ -1,4 +1,5 @@
 import logging
+from app.utils.helpers import safe_float
 from typing import Dict
 from collections import defaultdict
 from app.ingestion.data_loader import DataLoader
@@ -35,7 +36,7 @@ def compute_sector_exposure(
         # Consistent weight normalization logic [0, 1]
         raw_weight = fund.get("weight_in_portfolio", fund.get("weight_percent", fund.get("weight", 0.0)))
         try:
-            fund_weight = float(raw_weight)
+            fund_weight = safe_float(raw_weight)
             if fund_weight > 1.0:
                 fund_weight = fund_weight / 100.0
             fund_weight = max(0.0, min(1.0, fund_weight))
@@ -65,7 +66,7 @@ def compute_sector_exposure(
         for sector_name, percent in allocation.items():
             norm_sector_name = sector_name.upper()
             try:
-                sector_percent = float(percent)
+                sector_percent = safe_float(percent)
                 # Convert to decimal (e.g. 26.2 -> 0.262)
                 sector_decimal = sector_percent / 100.0
                 
@@ -82,7 +83,7 @@ def compute_sector_exposure(
 
     # --- STEP 3: Final Normalization ---
     # Convert defaultdict to regular dict and ensure float types
-    final_exposure = {s: float(w) for s, w in sector_exposure.items() if w > 0}
+    final_exposure = {s: safe_float(w) for s, w in sector_exposure.items() if w > 0}
     
     # Sort by exposure descending
     return dict(sorted(final_exposure.items(), key=lambda x: x[1], reverse=True))

@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import Dict, Any, List, DefaultDict
 from collections import defaultdict
@@ -25,7 +26,7 @@ def compute_news_intelligence(loader: DataLoader) -> dict:
     high_impact_stories = []
 
     for item in news_items:
-        score = float(item.get("sentiment_score", 0.0))
+        score = safe_safe_float(item.get("sentiment_score", 0.0))
         total_score += score
         
         # Track sector-specific sentiment

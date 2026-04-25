@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import List
 
@@ -23,7 +24,7 @@ def compute_impact_scores(
             continue
 
         try:
-            impact_val = float(sector_change) * float(portfolio_weight)
+            impact_val = safe_float(sector_change) * safe_float(portfolio_weight)
             
             # Enrich existing chain object
             chain_copy = chain.copy()

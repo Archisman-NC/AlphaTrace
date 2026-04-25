@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import List
 
@@ -28,7 +29,7 @@ def select_top_drivers(
             clean_sector = raw_sector.replace("_", " ").title()
             if clean_sector.upper() == "DIVERSIFIED HOLDINGS":
                 clean_sector = "Diversified Holdings"
-            impact_val = float(impact)
+            impact_val = safe_float(impact)
             reason = str(chain.get("news", "Unknown Reason")).strip()
             
             if clean_sector not in sector_groups:

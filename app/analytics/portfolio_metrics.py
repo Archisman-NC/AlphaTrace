@@ -1,4 +1,5 @@
 import logging
+from app.utils.helpers import safe_float
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,9 @@ def compute_portfolio_metrics(portfolio: dict) -> Dict[str, float]:
 
     try:
         return {
-            "total_value": float(total_value),
-            "daily_pnl": float(daily_pnl),
-            "daily_change_percent": float(daily_change)
+            "total_value": safe_float(total_value),
+            "daily_pnl": safe_float(daily_pnl),
+            "daily_change_percent": safe_float(daily_change)
         }
     except (ValueError, TypeError) as e:
         logger.warning(f"Error casting portfolio metrics to float: {e}")

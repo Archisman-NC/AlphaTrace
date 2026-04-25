@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import List, Dict
 
@@ -26,7 +27,7 @@ def get_top_impact_sectors(
         try:
             impact_list.append({
                 "sector": sector,
-                "impact": float(impact_val)
+                "impact": safe_float(impact_val)
             })
         except (ValueError, TypeError):
             continue

@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, List
 from app.ingestion.data_loader import DataLoader
+from app.utils.helpers import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ def compute_market_sentiment(loader: DataLoader) -> dict:
                 name = details.get("name", idx_key)
                 
                 # Coerce cleanly allowing for native string casting overrides defensively
-                change = float(details.get("change_percent", 0.0))
+                change = safe_float(details.get("change_percent", 0.0))
                 
                 supporting_indices.append({
                     "name": name,

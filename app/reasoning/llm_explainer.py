@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import os
 import json
 import logging
@@ -30,7 +31,7 @@ def generate_llm_explanation(
         }
 
     # Build Structured Input
-    change_val = float(portfolio_metrics.get("daily_change_percent", 0.0))
+    change_val = safe_float(portfolio_metrics.get("daily_change_percent", 0.0))
     direction = "declined" if change_val < 0 else "rose"
     abs_change = abs(change_val)
     payload = {

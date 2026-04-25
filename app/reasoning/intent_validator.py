@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from app.utils.helpers import safe_float
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -80,7 +81,7 @@ def validate_and_route(user_query: str, classification: dict, session_portfolio:
         result = json.loads(response.choices[0].message.content)
         
         # 5. PERMISSIVE THRESHOLD (TASK 1)
-        conf = float(result.get("confidence", 0.5))
+        conf = safe_float(result.get("confidence", 0.5))
         
         # HARD OVERRIDE: ALWAYS EXECUTE (Step 1 & 4)
         # Refusals and clarification requests are categorically banned.
@@ -90,6 +91,18 @@ def validate_and_route(user_query: str, classification: dict, session_portfolio:
         # Final Schema Normalization
         result["validated_intent"] = intents
         result["portfolio_id"] = portfolio_id
+        try:
+            conf = safe_float(result.get("confidence", 0.5))
+            if conf < 0.7:
+                # Low confidence classifier output -> fallback to full analysis
+                return {
+                    "action": "execute",
+                    "validated_intent": ["full_analysis"],
+                    "portfolio_id": portfolio_id,
+                    "confidence": conf
+                }
+        except:
+            pass
         
         return result
         

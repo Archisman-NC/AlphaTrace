@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import logging
 from typing import Dict
 
@@ -30,8 +31,8 @@ def link_portfolio_to_sector_trends(
             
         # Step 4 & 5: Build output structure
         linked_data[sector] = {
-            "portfolio_weight": float(weight),
-            "sector_change": float(change),
+            "portfolio_weight": safe_float(weight),
+            "sector_change": safe_float(change),
             "sentiment": str(sentiment)
         }
 

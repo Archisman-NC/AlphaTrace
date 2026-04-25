@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 import time
 from typing import List, Dict, Any, Optional
 from typing import List, Dict, Any, Optional
@@ -23,7 +24,7 @@ def normalize_memory_turn(
         normalized_drivers.append({
             "sector": d.get("sector", "Unknown"),
             "cause": d.get("trigger", d.get("cause", "broad market movement")),
-            "impact": float(d.get("impact", 0.0))
+            "impact": safe_float(d.get("impact", 0.0))
         })
 
     # DIRECT SLICE RISKS
@@ -36,7 +37,7 @@ def normalize_memory_turn(
     for r in raw_risks[:3]:
         normalized_risks.append({
             "type": r.get("type", "Concentration"),
-            "severity": float(r.get("severity", 0.5)),
+            "severity": safe_float(r.get("severity", 0.5)),
             "description": r.get("description", "Potential volatility")
         })
 
@@ -45,9 +46,9 @@ def normalize_memory_turn(
     metrics = {**full_analysis.get("metrics", {}), **reason_results.get("metrics", {}), **risk_results.get("metrics", {})}
     
     normalized_metrics = {
-        "portfolio_change": float(metrics.get("daily_change_percent", 0.0)),
+        "portfolio_change": safe_float(metrics.get("daily_change_percent", 0.0)),
         "top_sector": metrics.get("top_sector", "Diversified"),
-        "concentration": float(metrics.get("global_concentration_score", 0.0))
+        "concentration": safe_float(metrics.get("global_concentration_score", 0.0))
     }
 
     return {

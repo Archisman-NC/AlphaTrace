@@ -1,3 +1,4 @@
+from app.utils.helpers import safe_float
 try:
     print("[DEBUG] START: app/evaluation/llm_evaluator.py initialization")
     import re
@@ -14,7 +15,7 @@ try:
         if any(w in response.lower() for w in ["because", "due to", "driven by"]): score += 3
         if len(response.split()) > 20: score += 2
         
-        final_score = float(score)
+        final_score = safe_float(score)
         conf = min(0.9, (final_score / 10.0) + 0.1)
 
         return {

@@ -1,4 +1,5 @@
 import logging
+from app.utils.helpers import safe_float
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def compute_sector_impact(sector_link: Dict[str, dict]) -> Dict[str, dict]:
             
         try:
             # Step 2: Compute Impact
-            impact_val = float(weight) * float(change)
+            impact_val = safe_float(weight) * safe_float(change)
             
             # Step 3 & 4: Build output and round
             sector_impacts[sector] = {
