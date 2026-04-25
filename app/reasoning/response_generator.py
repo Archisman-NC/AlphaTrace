@@ -12,29 +12,62 @@ from app.evaluation.llm_evaluator import evaluate_response
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- ADVISORY SYSTEM PROMPT ---
+# --- ADAPTIVE RESPONSE ARCHITECTURE (Part 1 & 2) ---
+STRUCTURES = {
+    "FULL_ANALYSIS": [
+        "### 1. Key Insight",
+        "### 2. Top Drivers",
+        "### 3. Risks",
+        "### 4. Actions"
+    ],
+    "EXPLANATION": [
+        "### Explanation",
+        "### Key Factors"
+    ],
+    "COMPARISON": [
+        "### Comparison",
+        "### Pros",
+        "### Cons",
+        "### Recommendation"
+    ],
+    "GENERAL": [
+        "### Response"
+    ]
+}
+
+def classify_query(query: str) -> str:
+    """Lightweight intent classifier for structural selection."""
+    q = str(query).lower()
+    if any(x in q for x in ["analyze", "portfolio", "review", "status", "check"]):
+        return "FULL_ANALYSIS"
+    elif any(x in q for x in ["why", "explain", "reason", "because", "how"]):
+        return "EXPLANATION"
+    elif any(x in q for x in ["compare", "vs", "versus", "which is better", "difference"]):
+        return "COMPARISON"
+    else:
+        return "GENERAL"
+
+def validate_structure(response: str, structure: list):
+    """Diagnostic check for structural completeness."""
+    for section in structure:
+        if section not in response:
+            print(f"[WARN] Structural anomaly detected. Missing section: {section}")
+
+# --- ADVISORY SYSTEM PROMPT (Part 3 & 6) ---
 ADVISORY_SYSTEM_PROMPT = """
 You are the AlphaTrace AI Financial Intelligence Engine. Your mission is to professionally EXPLAIN and EXPAND the structured analytical signals provided by the system.
 
 STRICT FIDELITY RULES:
 1. DO NOT REINTERPRET: The 'drivers' and 'risks' in the data are pre-computed ground truth. You must use them exactly as prioritized by the system.
 2. DO NOT REPLACE: You are NOT authorized to choose different performance drivers. 
-3. EXPAND & CONTEXTUALIZE: Your primary task is to provide professional narrative depth to the pre-computed signals, mapping them into the required structure.
+3. EXPAND & CONTEXTUALIZE: Your primary task is to provide professional narrative depth.
 
-STRICT OUTPUT STRUCTURE:
-### 1. Key Insight
-- Explain the single most impactful portfolio signal identified by the system in one concise sentence.
+STRICT STRUCTURE COMPLIANCE:
+You MUST follow ONLY the structure provided below.
+Do NOT skip sections, add new sections, or reorder sections.
 
-### 2. Top Drivers
-- Elaborate on the 2-3 primary performance drivers provided in the 'drivers' data.
-- MANDATORY: Include ticker symbol and numeric metric (weight % or daily change %) directly from the source.
-
-### 3. Concrete Risks
-- Expand on the specific structural hazards identified in the 'risks' data.
-- DO NOT use vague warnings; maintain focus on the system-identified vulnerabilities.
-
-### 4. Actionable Suggestions
-- Direct commands based strictly on the current exposure and risk metrics provided.
+STRUCTURE:
+{structure}
 
 HARD RULES:
 1. NO HEDGING: BANNED WORDS: "appears", "may", "suggests", "could", "likely". Use confident, evidence-based language.
@@ -64,21 +97,29 @@ def generate_fallback_analysis(input_data: dict) -> str:
 
 def generate_validated_response(input_data: dict) -> str:
     """
-    REGRESSION-SAFE REPAIR ARCHITECTURE:
-    generate -> evaluate -> targeted repair -> signal audit -> merge/discard
+    ADAPTIVE RESPONSE PIPELINE:
+    intent -> structure -> generate -> evaluate -> repair -> validate
     """
     try:
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     except:
         return "Synthesis engine is currently offline."
 
-    # 1. BEST-EFFORT ADVISORY (Step 1 & 4)
-    # Refusal logic removed. We now proceed with available signals.
+    # 1. INTENT & STRUCTURE SELECTION (Part 4 & 7)
+    user_query = input_data.get("user_query", "")
+    intent = classify_query(user_query)
+    structure_list = STRUCTURES.get(intent, STRUCTURES["GENERAL"])
+    structure_str = "\n".join(structure_list)
+    
+    print(f"[INTENT] {intent}")
+    print(f"[STRUCTURE] {structure_list}")
 
-    # 2. INITIAL GENERATION
+    # 2. INITIAL GENERATION (Part 3)
+    dynamic_system_prompt = ADVISORY_SYSTEM_PROMPT.format(structure=structure_str)
+    
     messages = [
-        {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
-        {"role": "user", "content": f"Query: {input_data['user_query']}\nData: {json.dumps(input_data['tool_outputs'])}"}
+        {"role": "system", "content": dynamic_system_prompt},
+        {"role": "user", "content": f"Query: {user_query}\nData: {json.dumps(input_data['tool_outputs'])}"}
     ]
     try:
         response = client.chat.completions.create(
@@ -96,11 +137,13 @@ def generate_validated_response(input_data: dict) -> str:
     initial_score = eval_result.get("score", 0.0)
     initial_breakdown = eval_result.get("details", {})
     
-    # DEBUG (Step 5)
     print(f"[EVAL] score={initial_score}")
     
+    # Check for structural anomalies early
+    validate_structure(initial_draft, structure_list)
+
     # Bypass repair if already institutional grade
-    if initial_score >= 6.0: # UPDATED THRESHOLD
+    if initial_score >= 6.0:
         return initial_draft
 
     # 4. SELECTIVE REPAIR
@@ -110,13 +153,14 @@ def generate_validated_response(input_data: dict) -> str:
     if not initial_breakdown.get("has_causal"): missing_elements.append("causal reasoning")
     
     repair_instruction = f"""
-    The previous response is mostly correct, but is missing: {', '.join(missing_elements)}.
-    Only improve these specific aspects. Do NOT rewrite the entire answer. 
-    Preserve existing correct reasoning. Add missing info based strictly on tool data.
+    The previous response is missing mandatory elements: {', '.join(missing_elements)}.
+    Improve these aspects while strictly following the required structure.
+    Do NOT rewrite the entire answer. 
+    STRUCTURE: {structure_str}
     """
     
     retry_messages = [
-        {"role": "system", "content": ADVISORY_SYSTEM_PROMPT},
+        {"role": "system", "content": dynamic_system_prompt},
         {"role": "user", "content": f"Data: {json.dumps(input_data['tool_outputs'])}"},
         {"role": "assistant", "content": initial_draft},
         {"role": "user", "content": repair_instruction}
@@ -133,50 +177,24 @@ def generate_validated_response(input_data: dict) -> str:
         )
         improved_draft = str(retry_res.choices[0].message.content)
         
-        # 5. REGRESSION-SAFE MERGE LOGIC (TASK 1-4)
         retry_eval = evaluate_response(improved_draft)
         retry_score = retry_eval.get("score", 0.0)
-        retry_breakdown = retry_eval.get("details", {})
         
-        # DEBUG (Step 5)
         print(f"[EVAL-RETRY] score={retry_score}")
 
-        improved = False
         if retry_score > initial_score:
-            improved = True
-        elif retry_score == initial_score:
-            # Check for additive content improvement even if score capped
-            added_info = (
-                (not initial_breakdown.get("has_ticker") and retry_breakdown.get("has_ticker")) or
-                (not initial_breakdown.get("is_quant") and retry_breakdown.get("is_quant")) or
-                (not initial_breakdown.get("has_causal") and retry_breakdown.get("has_causal"))
-            )
-            if added_info: improved = True
-
-        regression = (
-            (initial_breakdown.get("has_ticker") and not retry_breakdown.get("has_ticker")) or
-            (initial_breakdown.get("is_quant") and not retry_breakdown.get("is_quant")) or
-            (initial_breakdown.get("has_causal") and not retry_breakdown.get("has_causal"))
-        )
-
-        if improved and not regression:
-            print(f"[MERGE] improved=True, regression=False (Score: {initial_score} -> {retry_score})")
             final_output = improved_draft
             final_score = retry_score
-        else:
-            print(f"[MERGE] improved={improved}, regression={regression} (Rejecting repair, keeping original)")
-            final_score = initial_score
+            validate_structure(final_output, structure_list)
     except Exception as e:
         print(f"[MERGE] Logic fault: {e}")
-        final_score = initial_score
 
-    # 6. FINAL DECISION (ALIGNED WITH TASK STEP 1 & 3)
+    # 5. FINAL DECISION
     if final_score < 4.0:
         return generate_fallback_analysis(input_data)
 
-    # 7. SOFT IMPROVEMENT LAYER
     if 4.0 <= final_score < 6.0:
-        final_output += "\n\n(This analysis provides a high-level view based on current data signals and may be refined as more context emerges.)"
+        final_output += "\n\n(Note: This analysis provides a high-level view based on prioritized signals.)"
 
     return final_output
 
