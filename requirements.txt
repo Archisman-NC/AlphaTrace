@@ -1,15 +1,16 @@
-pydantic
-python-dotenv
-groq
-langfuse
-pytest
-gradio
-streamlit
-openai
+# --- Core ---
 pandas
-plotly
+numpy
+scipy
 yfinance
+
+# --- Quantitative Analysis ---
 pandas-ta
 hmmlearn
-vectorbt
-scipy
+
+# --- AI & Reasoning ---
+# (Dependencies for LLM integration like openai, langchain, etc. if needed)
+
+# --- UI & Visualization ---
+streamlit
+plotly

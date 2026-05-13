@@ -9,7 +9,160 @@ from app.utils.helpers import safe_float
 
 logger = logging.getLogger(__name__)
 
-VALID_PORTFOLIOS = ["PORTFOLIO_001", "PORTFOLIO_002", "PORTFOLIO_003"]
+from app.data.portfolio_builder import (
+    get_portfolio_returns,
+    get_portfolio_metadata,
+    PORTFOLIOS,
+)
+from app.data.market_data import fetch_ohlcv
+from app.quant.regime_detector import detect_regimes_hmm, get_current_regime
+import numpy as np
+import pandas as pd
+
+def load_portfolio_context(
+    portfolio_id: str,
+    period: str = "6mo"
+) -> dict:
+    """
+    Load real portfolio context for reasoning.
+    
+    Returns a deterministic, serializable dictionary of analytics.
+    """
+    try:
+        # Fetch data
+        returns_df = get_portfolio_returns(portfolio_id, period=period)
+        meta = get_portfolio_metadata(portfolio_id)
+        
+        if returns_df.empty:
+            logger.warning(f"Empty returns for {portfolio_id}, using fallback context.")
+            return get_fallback_context(portfolio_id)
+
+        # 1. Latest Portfolio Return
+        latest_return = float(returns_df['portfolio_return'].iloc[-1])
+        
+        # 2. Weekly Compounded Return (5 trading days)
+        recent_returns = returns_df['portfolio_return'].tail(5)
+        weekly_return = float((1 + recent_returns).prod() - 1)
+        
+        # 3. Annualized Volatility
+        daily_vol = returns_df['portfolio_return'].std()
+        annual_vol = float(daily_vol * np.sqrt(252))
+        
+        # 4. Context Windowing (last 30 days of returns)
+        # We only keep the aggregate return to save space
+        recent_history_df = returns_df[['portfolio_return']].tail(30)
+        # Convert index to strings for JSON serializability
+        recent_history_df.index = recent_history_df.index.strftime('%Y-%m-%d')
+        recent_history = recent_history_df.to_dict()
+        
+        # 5. Holdings with daily change for reasoning tools compatibility
+        holdings_detail = []
+        for ticker, weight in meta["holdings"].items():
+            daily_change = 0.0
+            if ticker in returns_df.columns:
+                daily_change = float(returns_df[ticker].iloc[-1])
+            
+            holdings_detail.append({
+                "ticker": ticker,
+                "weight": float(weight),
+                "daily_change": daily_change,
+                "sector": meta["sector_exposure"].get(ticker, "Unknown")
+            })
+        
+        # 6. Market Regime Intelligence
+        # We use Nifty 50 Index (^NSEI) as the regime benchmark
+        regime_df = pd.DataFrame()
+        market_regime = {
+            "current_regime": "Unknown",
+            "days_in_regime": 0,
+            "regime_distribution": {"Bull": 0.0, "Bear": 0.0, "Sideways": 0.0}
+        }
+        
+        try:
+            # Fetch 2y history for regime detection stability
+            nifty_raw = fetch_ohlcv("^NSEI", period="2y")
+            if not nifty_raw.empty:
+                regime_df = detect_regimes_hmm(nifty_raw)
+                if not regime_df.empty:
+                    current_reg_info = get_current_regime(regime_df)
+                    
+                    # Calculate Distribution
+                    counts = regime_df["regime"].value_counts(normalize=True).to_dict()
+                    regime_dist = {
+                        "Bull": float(counts.get("Bull", 0.0)),
+                        "Bear": float(counts.get("Bear", 0.0)),
+                        "Sideways": float(counts.get("Sideways", 0.0))
+                    }
+                    
+                    market_regime = {
+                        "current_regime": current_reg_info["current_regime"],
+                        "days_in_regime": current_reg_info["days_in_regime"],
+                        "regime_distribution": regime_dist
+                    }
+        except Exception as reg_err:
+            logger.error(f"Regime detection failed during context load: {reg_err}")
+
+        context = {
+            "portfolio_id": portfolio_id,
+            "name": meta["name"],
+            "holdings": meta["holdings"],
+            "holdings_detail": holdings_detail,
+            "sector_exposure": meta["sector_exposure"],
+            "returns_summary": recent_history,
+            "latest_return": latest_return,
+            "weekly_return": weekly_return,
+            "volatility": annual_vol,
+            "num_assets": meta["holdings_count"],
+            "market_regime": market_regime,
+            "status": "success"
+        }
+        
+        # 7. Add Analytical Summary
+        context["market_summary"] = generate_market_summary(context)
+        
+        return context
+        
+    except Exception as e:
+        logger.error(f"Error loading portfolio context for {portfolio_id}: {e}")
+        return get_fallback_context(portfolio_id)
+
+def get_fallback_context(portfolio_id: str) -> dict:
+    """Safe fallback context to prevent reasoning engine crashes."""
+    return {
+        "portfolio_id": portfolio_id,
+        "name": "Unknown Portfolio",
+        "holdings": {},
+        "holdings_detail": [],
+        "sector_exposure": {},
+        "returns_summary": {},
+        "latest_return": 0.0,
+        "weekly_return": 0.0,
+        "volatility": 0.0,
+        "num_assets": 0,
+        "market_regime": {
+            "current_regime": "Unknown",
+            "days_in_regime": 0,
+            "regime_distribution": {"Bull": 0.0, "Bear": 0.0, "Sideways": 0.0}
+        },
+        "market_summary": "Portfolio analytics are currently unavailable.",
+        "status": "fallback"
+    }
+
+def generate_market_summary(context: dict) -> str:
+    """Produce a concise, strictly analytical summary for the AI layer."""
+    regime = context.get("market_regime", {})
+    current = regime.get("current_regime", "Unknown")
+    days = regime.get("days_in_regime", 0)
+    
+    p_ret = context.get("latest_return", 0.0)
+    vol = context.get("volatility", 0.0)
+    
+    # Strictly observational and probabilistic language
+    summary = f"Market regime is currently {current} and has persisted for {days} days. "
+    summary += f"Portfolio performance exhibits a daily return of {p_ret:+.2%} "
+    summary += f"with annualized volatility estimated at {vol:.2%}."
+    
+    return summary
 
 def build_safe_error_payload(tool_type: str) -> dict:
     return {
@@ -19,36 +172,24 @@ def build_safe_error_payload(tool_type: str) -> dict:
     }
 
 def get_portfolio_context_data(portfolio_id: str) -> dict:
-    from app.ingestion.data_loader import DataLoader
-    from app.analytics.portfolio_loader import load_portfolio
-    from app.analytics.portfolio_normalizer import normalize_holdings
-    from app.analytics.sector_exposure import compute_sector_exposure
-    
-    _loader = DataLoader(os.path.join("data", "mock"))
-    # Portfolio Validation
-    if portfolio_id not in VALID_PORTFOLIOS:
+    # Portfolio Validation (Legacy shim)
+    if portfolio_id not in PORTFOLIOS:
         portfolio_id = "PORTFOLIO_001"
 
-    try:
-        raw = load_portfolio(_loader, portfolio_id)
-        if not raw: return {"error": "no_data"}
+    # Use the new high-fidelity context loader
+    ctx = load_portfolio_context(portfolio_id)
+    
+    if ctx.get("status") == "fallback":
+        return {"error": "no_data"}
         
-        norm_map = normalize_holdings(_loader, raw)
-        exp = compute_sector_exposure(_loader, norm_map, raw)
-        
-        ranked_holdings = []
-        for ticker, h_data in norm_map.items():
-            ranked_holdings.append({
-                "ticker": str(ticker), 
-                "sector": str(h_data.get("sector", "Unknown")),
-                "weight": safe_float(h_data.get("weight", 0.0)),
-                "daily_change": safe_float(h_data.get("day_change", 0.0))
-            })
-        ranked_holdings.sort(key=lambda x: x["weight"], reverse=True)
-        
-        return {"_loader": _loader, "exposure": exp, "holdings_map": norm_map, "ranked_holdings": ranked_holdings, "portfolio_id": portfolio_id}
-    except:
-        return {"error": "exception"}
+    # Map to legacy structure for downstream tool compatibility
+    return {
+        "exposure": ctx["sector_exposure"],
+        "holdings_map": ctx["holdings"], 
+        "ranked_holdings": ctx["holdings_detail"],
+        "portfolio_id": portfolio_id,
+        "analytics": ctx # Pass full context for new tools
+    }
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     from app.analytics.market_intelligence import build_market_intelligence
@@ -67,7 +208,10 @@ def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("reason")
     p_id = ctx["portfolio_id"]
-    _loader = ctx["_loader"]
+    
+    # Optional: If a tool strictly needs _loader, we provide a dummy or a news-only loader
+    from app.ingestion.data_loader import DataLoader
+    _loader = DataLoader(os.path.join("data", "mock")) 
 
     try:
         m_intel = build_market_intelligence(_loader)

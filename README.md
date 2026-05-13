@@ -1,81 +1,62 @@
-# AlphaTrace 📈
-### **Autonomous Financial Intelligence & Reasoning Copilot**
+# AlphaTrace: Contextual Quantitative Intelligence
 
-AlphaTrace is a production-grade AI financial advisor that moves beyond simple chat. It executes **deterministic causal reasoning** to link global market signals directly to portfolio impact, providing sharp, actionable insights without the fluff.
+AlphaTrace is a professional-grade quantitative research platform that combines deterministic backtesting with regime-aware AI reasoning. It is designed for researchers who require high-fidelity analytical rigor paired with interpretable, context-specific market insights.
 
-[**🌐 Live Production App**](https://alphatrace-w7zqnrcq5wcjv4fb4qncrg.streamlit.app/) | [**📺 Video Demo (Loom)**](https://www.loom.com/share/2ebc198b32114ea1a0f17937952aa862) | [**📊 Architecture Documentation**](#architecture)
+## Core Features
 
----
+- **📈 Vectorized Backtesting**: High-performance strategy evaluation with lookahead bias protection and geometric compounding.
+- **🧠 HMM Regime Detection**: Probabilistic market classification (Bull/Bear/Sideways) using Hidden Markov Models.
+- **🔍 Deterministic Diagnostics**: Strategy explainability that attributes performance and signal triggers to specific market states.
+- **💬 AI Copilot**: A reasoning engine that interprets quantitative snapshots to provide grounded, non-speculative market analysis.
+- **📊 Interactive Terminal**: A Streamlit-based dashboard for rapid strategy iteration and visual performance audit.
 
-## **The AlphaTrace Difference**
-Most AI financial tools are mere wrappers around LLMs. AlphaTrace is a **multi-component reasoning engine** built for institutional-grade stability and precision.
+## Architecture Overview
 
-*   🛡️ **Deterministic Integrity**: Every insight is anchored in pre-computed mathematical signals. No hallucinated gains or tickers.
-*   🧠 **Adaptive Narrative Synthesis**: Natural, question-driven responses that adapt their structure based on user intent (Analysis vs. Explanation vs. Advice).
-*   🛰️ **Proactive Intelligence**: An autonomous "Active Lookout" that flags sector divergence and concentration risks before you ask.
-*   ⚖️ **Self-Correcting Loop**: An internal auditor grades every analytical turn on data fidelity, triggering immediate regeneration if the "Analyst Grade" falls below threshold.
+```text
+       [ Market Ingestion ]
+               ↓
+    [ Signal & Indicator Engine ]
+               ↓
+    [ Vectorized Backtesting ] ──> [ Performance Metrics ]
+               ↓                         ↓
+    [ HMM Regime Detection ] ──> [ Strategy Diagnostics ]
+               ↓                         ↓
+      [ AI Context Mixer ] <─────────────┘
+               ↓
+      [ Streamlit Dashboard ]
+```
 
----
+## Repository Structure
 
-## **Core Analytical Engines**
-*   **Contextual Resolver**: Uses episodic memory to disambiguate complex multi-turn financial queries.
-*   **Deterministic Causal Chains**: Extends Macro News → Sector Trends → Asset Performance → Portfolio Impact.
-*   **Institutional Sector Profiler**: Real-time exposure mapping across direct stock and indirect mutual fund holdings.
-*   **Fidelity Registry**: Dynamic confidence marker surfaced as High/Moderate/Best-Effort signal strength.
+- `app/data/`: Market ingestion and portfolio construction.
+- `app/quant/`: The analytical core (Signals, Backtester, Regimes, Diagnostics).
+- `app/reasoning/`: The AI orchestration layer and context loaders.
+- `app/ui/`: Streamlit dashboard implementation.
+- `docs/`: Technical architecture and implementation details.
+- `scratch/`: Official component verification scripts.
 
----
+## Installation
 
-## **Architecture Ovenview**
-AlphaTrace utilizes a modular 8-phase reasoning pipeline:
-
-1.  **Intent Classifier**: Maps queries to specialized analytical engines (Reason, Risk, Comparison).
-2.  **Execution Router**: Orchestrates deterministic tools across market and portfolio data sources.
-3.  **Causal Linker**: Extracts triggers from news and maps them to quantitative asset performance.
-4.  **Narrative Generator**: Synthesizes sharp, analyst-persona responses lead by the specific user question.
-5.  **Heuristic Evaluator**: Audits the draft for specific tickers, numeric grounding, and causal logic.
-6.  **Proactive Engine**: Scans turn outputs for "hidden signals" to suggest the next logical analysis.
-
----
-
-## **Tech Stack**
-*   **Reasoning Core**: Groq Llama-3.3-70b-versatile (Ultra-low latency intelligence)
-*   **Interface**: Streamlit (Premium financial dashboard)
-*   **Observability**: Langfuse (Full-stack trace & quality scoring)
-*   **Mathematical Core**: Pandas, Plotly, Custom Causal Extraction Parsers
-*   **Resilience**: Institutional safe-parsing (`safe_float`) and stable namespace sentinels.
-
----
-
-## **Getting Started**
-
-### **1. Clone & Install**
 ```bash
-git clone https://github.com/Archisman-NC/AlphaTrace.git
+# 1. Clone the repository
+git clone <repo-url>
 cd AlphaTrace
+
+# 2. Install dependencies
 pip install -r requirements.txt
 ```
 
-### **2. Configure Environment**
-Create a `.env` file with your credentials:
-```env
-GROQ_API_KEY=your_groq_key
-OPENAI_API_KEY=your_openai_key
-LANGFUSE_PUBLIC_KEY=your_key
-LANGFUSE_SECRET_KEY=your_key
-LANGFUSE_HOST=your_host
-```
+## Running the Project
 
-### **3. Run Application**
+To launch the interactive research terminal:
+
 ```bash
-streamlit run main.py
+python run_app.py
 ```
 
----
+## Quantitative Philosophy
 
-## **Sample Queries**
-*   **Contextual Analysis**: *"Why is my portfolio down today compared to the Nifty 50?"*
-*   **Strategic Comparison**: *"Compare my IT holdings vs. Banking sector performance."*
-*   **Direct Advice**: *"What should I do about the concentration risk in my diversified portfolio?"*
+AlphaTrace is built on **Deterministic Contracts**. Every analytical output—from Sharpe ratios to regime labels—is generated through reproducible, mathematically grounded pipelines. The AI layer acts as an interpretability bridge, never as a black-box signal generator.
 
 ---
-*Built for the next generation of autonomous investment management.*
+*AlphaTrace: Interpretable Intelligence for Quantitative Research.*
