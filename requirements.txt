@@ -8,3 +8,8 @@ streamlit
 openai
 pandas
 plotly
+yfinance
+pandas-ta
+hmmlearn
+vectorbt
+scipy
