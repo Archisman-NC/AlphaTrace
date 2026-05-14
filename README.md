@@ -2,71 +2,74 @@
 
 AlphaTrace is a professional-grade quantitative intelligence platform designed for strategy research, market regime detection, and operational health monitoring. It transforms raw market data into structured, actionable research intelligence using a deterministic, interpretability-first architecture.
 
-## 🚀 Core Architecture
+## 🚀 Architecture Overview
 
 AlphaTrace follows a layered intelligence philosophy where quantitative rigor grounds AI reasoning.
 
 ```mermaid
 graph TD
-    A[Market Data Layer] --> B[Technical Signal Engine]
-    B --> C[Portfolio Signal Intelligence]
-    C --> D[Regime Detection & Diagnostics]
-    D --> E[Statistical Watchdog Engine]
-    E --> F[AI Reasoning Context]
-    F --> G[Interactive Research Dashboard]
+    subgraph Production Stack
+        A[Market Data Layer] --> B[Technical Signal Engine]
+        B --> C[Portfolio Signal Intelligence]
+        C --> D[Regime Detection & Diagnostics]
+        D --> E[Statistical Watchdog Engine]
+        E --> F[AI Reasoning Context]
+        F --> G[Interactive Research Dashboard]
+    end
+
+    subgraph Experimental Research
+        H[RL Simulation Sandbox] --> I[PPO Training Workflow]
+        I --> J[Comparative Evaluation Framework]
+    end
 ```
 
-## 🛠️ Key Frameworks
+## 🛠️ Feature Map
 
-### 🎯 Signal Intelligence
-Deterministic, triple-confirmation signals (RSI/MACD/BB) with bounded confidence scores and causal explanations.
-*   *Documentation*: [Signals Schema](docs/signals_schema.md)
-
-### 🚨 Statistical Watchdog
-Institutional-grade health monitoring detecting Sharpe decay, structural distribution shifts (KS-Test), and acute anomalies (Z-Score).
-*   *Documentation*: [Watchdog Framework](docs/watchdog_framework.md)
-
-### 🏢 Portfolio Intelligence
-Cross-asset signal ranking, market bias classification, and sector conviction clustering to surface concentrated opportunities.
-*   *Documentation*: [Portfolio Intelligence](docs/portfolio_intelligence.md)
-
-### 🤖 AI Reasoning
-A context-aware synthesis layer that fuses regimes, watchdog alerts, and signal intelligence to provide grounded research guidance.
-*   *Documentation*: [Reasoning Architecture](docs/reasoning_architecture.md)
+*   **🎯 Live Signal Intelligence**: Surfacing actionable opportunities with causal reasoning across multi-asset portfolios.
+*   **🚨 Statistical Watchdog**: Operational monitoring for Sharpe decay, structural shifts (KS-Test), and acute anomalies (Z-Score).
+*   **📈 Market Regime Awareness**: HMM-based regime detection (Bull/Bear/Sideways) with persistence tracking.
+*   **🤖 Proactive Reasoning**: A context-aware AI assistant grounded in pre-calculated quantitative fact.
+*   **🧪 RL Research Sandbox**: Isolated environment for training and evaluating PPO agents against deterministic baselines.
 
 ## ⚖️ Research Philosophy
 
 AlphaTrace is built on the principle of **Deterministic Integrity**:
-*   **Interpretability > Prediction**: Every output is mathematically traceable.
-*   **Contextual Awareness**: Intelligence is always framed by market regimes and operational health.
-*   **No Black-Boxes**: We avoid opaque ML models in favor of auditable quantitative logic.
-*   **Operational Intelligence**: Focus on the "Now" and strategy health, not speculative forecasting.
+*   **Interpretability > Prediction**: Every output is mathematically traceable and explainable.
+*   **Operational Intelligence**: Focus on the "Now" and strategy health over speculative forecasting.
+*   **No Black-Boxes**: Strict separation between deterministic production logic and experimental RL research.
+*   **Reproducibility**: Identical market states always produce identical intelligence outputs.
 
-## 📋 Getting Started
+## 🏁 Quickstart
 
-### Installation
 ```bash
 pip install -r requirements.txt
+
+# Launch the Research Dashboard
+python3 run_dashboard.py
+
+# Run the Quantitative Verification Suite
+python3 run_verification.py
+
+# Execute the RL Research Pipeline
+python3 run_research.py
 ```
 
-### Run the Research Dashboard
-```bash
-streamlit run run_app.py
-```
+## 📋 Documentation Reference
 
-### Run Verification Suite
-AlphaTrace includes a comprehensive deterministic verification suite:
-```bash
-python3 scratch/verify_signal_generator.py
-python3 scratch/verify_watchdog.py
-python3 scratch/verify_portfolio_signals.py
-```
+*   [Quickstart Guide](docs/quickstart.md)
+*   [Demo Workflows](docs/demo_workflows.md)
+*   [Signals Schema](docs/signals_schema.md)
+*   [Reasoning Architecture](docs/reasoning_architecture.md)
+*   [Watchdog Framework](docs/watchdog_framework.md)
+*   [Portfolio Intelligence](docs/portfolio_intelligence.md)
+*   [Research Methodology](docs/research_methodology.md)
+*   [RL Research Sandbox](docs/rl_research_sandbox.md)
+*   [Comparative RL Research](docs/comparative_rl_research.md)
 
-## 🛡️ Known Limitations
-*   No transaction-cost or slippage modeling.
-*   Static signal thresholds (not regime-adaptive).
-*   No autonomous execution or broker integration.
-*   Single timeframe (Daily) analysis.
+## 🛡️ Known Constraints
+*   **No Execution Engine**: AlphaTrace is a research infrastructure tool, not a trading bot.
+*   **Simplified RL Environment**: RL models operate on daily bars with simplified liquidity assumptions.
+*   **Local Workflow**: Optimized for local quantitative research, not distributed cloud deployment.
 
 ---
 *AlphaTrace is a research infrastructure tool. Past performance is not indicative of future results.*

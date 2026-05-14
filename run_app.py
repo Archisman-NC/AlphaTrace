@@ -1,18 +1,12 @@
 import os
-import subprocess
 import sys
-
-def main():
-    dashboard_path = os.path.join("app", "ui", "dashboard.py")
-    if not os.path.exists(dashboard_path):
-        print(f"Error: Dashboard not found at {dashboard_path}")
-        sys.exit(1)
-    
-    print("🚀 Launching AlphaTrace Dashboard...")
-    try:
-        subprocess.run(["streamlit", "run", dashboard_path])
-    except KeyboardInterrupt:
-        print("\n👋 Dashboard stopped.")
+import subprocess
 
 if __name__ == "__main__":
-    main()
+    # This is a legacy entrypoint. Forwarding to run_dashboard.py
+    print("🔔 Note: 'run_app.py' is deprecated. Please use 'run_dashboard.py' in the future.")
+    try:
+        cmd = [sys.executable, "run_dashboard.py"]
+        subprocess.run(cmd)
+    except KeyboardInterrupt:
+        pass
