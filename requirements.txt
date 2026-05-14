@@ -8,6 +8,10 @@ yfinance
 pandas-ta
 hmmlearn
 
+# --- Reinforcement Learning (Experimental) ---
+stable-baselines3
+gymnasium
+
 # --- AI & Reasoning ---
 # (Dependencies for LLM integration like openai, langchain, etc. if needed)
 
