@@ -5,8 +5,9 @@ import sys
 def main():
     print("🚀 Launching AlphaTrace Intelligence Dashboard...")
     try:
-        # We call the existing run_app.py or streamlit directly
-        cmd = ["streamlit", "run", "run_app.py", "--server.runOnSave", "false"]
+        # POINT DIRECTLY TO THE UI ENTRYPOINT
+        # This avoids the circular dependency with run_app.py
+        cmd = ["streamlit", "run", "app/ui/dashboard.py", "--server.runOnSave", "false"]
         subprocess.run(cmd)
     except KeyboardInterrupt:
         print("\n👋 Dashboard stopped.")
