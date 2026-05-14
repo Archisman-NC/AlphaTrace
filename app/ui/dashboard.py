@@ -14,6 +14,7 @@ print("🚀 STABLE IMPORT MODE ACTIVE")
 import json
 import logging
 import time
+from dataclasses import asdict
 
 import streamlit as st
 import pandas as pd
