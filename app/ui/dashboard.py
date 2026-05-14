@@ -17,6 +17,7 @@ import time
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from dotenv import load_dotenv
@@ -38,10 +39,12 @@ from app.utils.helpers import safe_float
 
 # --- Direct Core Imports (Removing shields) ---
 from app.evaluation.llm_evaluator import evaluate_response
-from app.reasoning.proactive_engine import generate_proactive_insight
-from app.reasoning.intent_classifier import classify_intent
-from app.reasoning.intent_validator import validate_and_route
 from app.reasoning.memory_engine import normalize_memory_turn, extract_relevant_memory
+from app.reasoning.proactive_engine import (
+    generate_proactive_insight,
+    get_watchdog_insights,
+    watchdog_reasoning_context
+)
 
 # --- Lazy-Load Wrappers (Part 3) ---
 def get_resolve_context():
@@ -77,6 +80,7 @@ if "proactive_metadata" not in st.session_state: st.session_state.proactive_meta
 if "last_insight_topic" not in st.session_state: st.session_state.last_insight_topic = None
 if "last_insight_turn" not in st.session_state: st.session_state.last_insight_turn = -2
 if "pending_prompt" not in st.session_state: st.session_state.pending_prompt = None
+if "watchdog_results" not in st.session_state: st.session_state.watchdog_results = None
 
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
@@ -138,7 +142,7 @@ with st.sidebar:
             st.plotly_chart(fig, width="stretch")
 
 # --- Main Content Tabs ---
-tab_ai, tab_backtest = st.tabs(["💬 AI Copilot", "📊 Backtest Terminal"])
+tab_ai, tab_backtest, tab_watchdog = st.tabs(["💬 AI Copilot", "📊 Backtest Terminal", "🚨 Watchdog"])
 
 with tab_ai:
     # --- Chat Display ---
@@ -367,3 +371,140 @@ with tab_backtest:
                             st.write("Insufficient regime data for breakdown.")
                 else:
                     st.error("Backtest failed to produce valid results.")
+
+with tab_watchdog:
+    st.header("🚨 Strategy Watchdog Engine")
+    st.caption("Operational strategy-health monitoring and statistical anomaly detection.")
+    
+    # 1. Monitoring Controls
+    wcol1, wcol2, wcol3 = st.columns([2, 1, 1])
+    with wcol1:
+        selected_portfolio_label = st.selectbox(
+            "Select Portfolio to Scan",
+            options=list(PORTFOLIO_MAPPING.keys()),
+            index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0,
+            key="watchdog_portfolio_select"
+        )
+        selected_pid = PORTFOLIO_MAPPING[selected_portfolio_label]
+    
+    with wcol2:
+        monitor_window = st.selectbox(
+            "Monitoring Window",
+            options=["30d", "90d", "1y"],
+            index=2,
+            help="Window for statistical comparison (recent vs trailing)."
+        )
+    
+    with wcol3:
+        st.write("") # Spacer
+        scan_btn = st.button("🔍 Run Health Scan", use_container_width=True)
+
+    # 2. Scan Execution
+    if scan_btn:
+        with st.spinner("Scanning portfolio for statistical anomalies..."):
+            try:
+                portfolio_data = PORTFOLIOS.get(selected_pid, {})
+                tickers = list(portfolio_data.get("holdings", {}).keys())
+                
+                if not tickers:
+                    st.warning("No tickers found in the selected portfolio.")
+                else:
+                    portfolio_returns = {}
+                    for t in tickers:
+                        # Use a 2y period to ensure enough trailing history for 1y monitor
+                        raw_df = fetch_ohlcv(t, period="2y")
+                        if not raw_df.empty:
+                            portfolio_returns[t] = raw_df["Close"].pct_change().dropna()
+                    
+                    if portfolio_returns:
+                        # Step 1: Run Watchdog Detectors & Proactive Aggregation
+                        insights = get_watchdog_insights(portfolio_returns)
+                        st.session_state.watchdog_results = insights
+                    else:
+                        st.error("Could not fetch return history for portfolio tickers.")
+            except Exception as e:
+                logger.error(f"Watchdog scan failure: {e}")
+                st.error("Failed to complete health scan. Check logs for details.")
+
+    # 3. Rendering Results
+    if st.session_state.watchdog_results:
+        res = st.session_state.watchdog_results
+        
+        # Operational Status Header
+        st.divider()
+        status = res["status"]
+        if status == "STABLE":
+            st.success(f"🟢 STATUS: {status}")
+        elif status == "WATCH":
+            st.warning(f"🟠 STATUS: {status}")
+        elif status in ["DEGRADED", "CRITICAL"]:
+            st.error(f"🔴 STATUS: {status}")
+            
+        # Alert Metrics
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Critical Alerts", len(res["critical_alerts"]))
+        m2.metric("High Alerts", len(res["high_alerts"]))
+        m3.metric("Total Anomalies", len(res["critical_alerts"]) + len(res["high_alerts"]) + len(res["medium_alerts"]))
+        m4.metric("Risk Profile", status.title())
+
+        # Operational Summary & Suggested Actions
+        st.info(f"**Operational Summary:** {res['summary']}")
+        
+        if res["suggested_actions"]:
+            with st.expander("💡 Suggested Investigations", expanded=True):
+                for action in res["suggested_actions"]:
+                    st.write(f"- {action}")
+
+        # Alert Table
+        st.subheader("📋 Active Statistical Alerts")
+        all_alerts = res["critical_alerts"] + res["high_alerts"] + res["medium_alerts"] + res["low_alerts"]
+        if all_alerts:
+            alert_df = pd.DataFrame(all_alerts)
+            # Reorder for UI
+            cols = ["ticker", "alert_type", "severity", "metric_value", "threshold", "triggered_at"]
+            st.dataframe(alert_df[cols], use_container_width=True, hide_index=True)
+        else:
+            st.write("No active alerts detected.")
+
+        # Rolling Sharpe Visualization
+        if res["critical_alerts"] or res["high_alerts"]:
+            st.divider()
+            st.subheader("📉 Strategy Decay Visualization")
+            
+            # Find the top risk ticker
+            top_risk_alert = (res["critical_alerts"] + res["high_alerts"])[0]
+            target_ticker = top_risk_alert["ticker"]
+            
+            # Fetch data for plotting
+            plot_df = fetch_ohlcv(target_ticker, period="1y")
+            if not plot_df.empty:
+                returns = plot_df["Close"].pct_change().dropna()
+                # Simple rolling sharpe
+                rolling_sharpe = (returns.rolling(20).mean() / returns.rolling(20).std()) * np.sqrt(252)
+                
+                fig_decay = go.Figure()
+                fig_decay.add_trace(go.Scatter(
+                    x=rolling_sharpe.index, y=rolling_sharpe,
+                    name="Rolling 20d Sharpe",
+                    line=dict(color="#00FFCC", width=2)
+                ))
+                # Add baseline
+                baseline = (returns.mean() / returns.std()) * np.sqrt(252)
+                fig_decay.add_hline(y=baseline, line_dash="dash", line_color="#888888", annotation_text="Trailing Baseline")
+                
+                fig_decay.update_layout(
+                    title=f"Sharpe Decay Analysis: {target_ticker}",
+                    template="plotly_dark",
+                    yaxis_title="Sharpe Ratio",
+                    height=350,
+                    margin=dict(l=0, r=0, t=40, b=0)
+                )
+                st.plotly_chart(fig_decay, use_container_width=True)
+
+        # AI Escalation Context Preview
+        with st.expander("🤖 AI Escalation Context (Internal View)"):
+            st.caption("This is the structured operational context provided to the reasoning engine.")
+            ctx = watchdog_reasoning_context(res)
+            st.code(ctx, language="text")
+    else:
+        st.info("Select a portfolio and run a health scan to evaluate operational risks.")
