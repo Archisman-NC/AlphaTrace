@@ -18,6 +18,14 @@ from app.data.market_data import fetch_ohlcv
 from app.quant.regime_detector import detect_regimes_hmm, get_current_regime
 import numpy as np
 import pandas as pd
+from app.quant.portfolio_signals import (
+    scan_portfolio_signals,
+    generate_portfolio_signal_summary,
+    aggregate_sector_signals,
+    generate_signal_diagnostics,
+    portfolio_signal_reasoning_context
+)
+from dataclasses import asdict
 
 def load_portfolio_context(
     portfolio_id: str,
@@ -102,6 +110,63 @@ def load_portfolio_context(
         except Exception as reg_err:
             logger.error(f"Regime detection failed during context load: {reg_err}")
 
+        # 7. Portfolio Signal Intelligence
+        signal_intelligence = {
+            "market_bias": "NEUTRAL",
+            "top_opportunity": None,
+            "sector_clusters": [],
+            "signal_diagnostics": [],
+            "summary": "Signal intelligence currently unavailable."
+        }
+        
+        try:
+            # Prepare ticker data dict for signal scanner
+            # We use the returns_df which already contains columns for each ticker
+            ticker_data = {}
+            for ticker in meta["holdings"].keys():
+                if ticker in returns_df.columns:
+                    # Signal generator needs OHLCV-like structure, but it mostly needs 'Close'
+                    # and indicators. We can create a lightweight proxy or fetch if needed.
+                    # To ensure accuracy, we'll fetch indicators if they aren't here.
+                    from app.quant.signals import compute_signals
+                    raw_ticker = fetch_ohlcv(ticker, period=period)
+                    if not raw_ticker.empty:
+                        ticker_data[ticker] = compute_signals(raw_ticker)
+            
+            if ticker_data:
+                # Use HMM regimes if we had them per ticker, but for now we use global
+                # or empty dict if per-ticker regimes aren't calculated yet.
+                signals = scan_portfolio_signals(ticker_data)
+                sig_summary = generate_portfolio_signal_summary(signals)
+                sector_agg = aggregate_sector_signals(signals)
+                sig_diagnostics = generate_signal_diagnostics(signals, sig_summary, sector_agg)
+                
+                # Identify clusters
+                clusters = [d for d in sig_diagnostics if "cluster" in d.lower()]
+                
+                top_opp = None
+                if signals and signals[0].direction != "NEUTRAL":
+                    s = signals[0]
+                    top_opp = {
+                        "ticker": s.ticker,
+                        "direction": s.direction,
+                        "confidence": float(s.confidence),
+                        "signal_strength": s.signal_strength,
+                        "sector": meta["sector_exposure"].get(s.ticker, "Unknown"),
+                        "causal_reason": s.causal_reason
+                    }
+                
+                signal_intelligence = {
+                    "market_bias": sig_summary.market_bias,
+                    "top_opportunity": top_opp,
+                    "sector_clusters": clusters,
+                    "signal_diagnostics": sig_diagnostics,
+                    "summary": generate_signal_intelligence_summary(sig_summary, clusters),
+                    "raw_summary": asdict(sig_summary)
+                }
+        except Exception as sig_err:
+            logger.error(f"Signal intelligence injection failed: {sig_err}")
+
         context = {
             "portfolio_id": portfolio_id,
             "name": meta["name"],
@@ -114,6 +179,7 @@ def load_portfolio_context(
             "volatility": annual_vol,
             "num_assets": meta["holdings_count"],
             "market_regime": market_regime,
+            "signal_intelligence": signal_intelligence,
             "status": "success"
         }
         
@@ -144,6 +210,13 @@ def get_fallback_context(portfolio_id: str) -> dict:
             "days_in_regime": 0,
             "regime_distribution": {"Bull": 0.0, "Bear": 0.0, "Sideways": 0.0}
         },
+        "signal_intelligence": {
+            "market_bias": "NEUTRAL",
+            "top_opportunity": None,
+            "sector_clusters": [],
+            "signal_diagnostics": [],
+            "summary": "Signal intelligence currently unavailable."
+        },
         "market_summary": "Portfolio analytics are currently unavailable.",
         "status": "fallback"
     }
@@ -157,12 +230,32 @@ def generate_market_summary(context: dict) -> str:
     p_ret = context.get("latest_return", 0.0)
     vol = context.get("volatility", 0.0)
     
-    # Strictly observational and probabilistic language
-    summary = f"Market regime is currently {current} and has persisted for {days} days. "
-    summary += f"Portfolio performance exhibits a daily return of {p_ret:+.2%} "
-    summary += f"with annualized volatility estimated at {vol:.2%}."
+    # 1. Base Market Overview
+    summary = f"Market regime is {current} ({days} days). "
+    summary += f"Portfolio daily return: {p_ret:+.2%}, Volatility: {vol:.2%}. "
     
-    return summary
+    # 2. Signal Context Fusion
+    sig_intel = context.get("signal_intelligence", {})
+    if sig_intel.get("market_bias") != "NEUTRAL":
+        summary += f"Signal structure reflects a {sig_intel['market_bias']} bias. "
+        if sig_intel.get("top_opportunity"):
+            top = sig_intel["top_opportunity"]
+            summary += f"Top opportunity: {top['ticker']} ({top['direction']}). "
+    
+    return summary.strip()
+
+def generate_signal_intelligence_summary(summary_obj: Any, clusters: List[str]) -> str:
+    """Produce concise operational intelligence summary for the signal layer."""
+    bias = summary_obj.market_bias
+    longs = summary_obj.long_signals
+    shorts = summary_obj.short_signals
+    
+    text = f"Portfolio signals reflect a {bias} bias ({longs} LONG, {shorts} SHORT). "
+    if clusters:
+        # Use only the first cluster for brevity
+        text += f"Key cluster: {clusters[0].split('.')[0]}."
+        
+    return text.strip()
 
 def build_safe_error_payload(tool_type: str) -> dict:
     return {

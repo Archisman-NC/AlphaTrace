@@ -1,62 +1,72 @@
-# AlphaTrace: Contextual Quantitative Intelligence
+# 📊 AlphaTrace: Quantitative Intelligence Research Workbench
 
-AlphaTrace is a professional-grade quantitative research platform that combines deterministic backtesting with regime-aware AI reasoning. It is designed for researchers who require high-fidelity analytical rigor paired with interpretable, context-specific market insights.
+AlphaTrace is a professional-grade quantitative intelligence platform designed for strategy research, market regime detection, and operational health monitoring. It transforms raw market data into structured, actionable research intelligence using a deterministic, interpretability-first architecture.
 
-## Core Features
+## 🚀 Core Architecture
 
-- **📈 Vectorized Backtesting**: High-performance strategy evaluation with lookahead bias protection and geometric compounding.
-- **🧠 HMM Regime Detection**: Probabilistic market classification (Bull/Bear/Sideways) using Hidden Markov Models.
-- **🔍 Deterministic Diagnostics**: Strategy explainability that attributes performance and signal triggers to specific market states.
-- **💬 AI Copilot**: A reasoning engine that interprets quantitative snapshots to provide grounded, non-speculative market analysis.
-- **📊 Interactive Terminal**: A Streamlit-based dashboard for rapid strategy iteration and visual performance audit.
+AlphaTrace follows a layered intelligence philosophy where quantitative rigor grounds AI reasoning.
 
-## Architecture Overview
-
-```text
-       [ Market Ingestion ]
-               ↓
-    [ Signal & Indicator Engine ]
-               ↓
-    [ Vectorized Backtesting ] ──> [ Performance Metrics ]
-               ↓                         ↓
-    [ HMM Regime Detection ] ──> [ Strategy Diagnostics ]
-               ↓                         ↓
-      [ AI Context Mixer ] <─────────────┘
-               ↓
-      [ Streamlit Dashboard ]
+```mermaid
+graph TD
+    A[Market Data Layer] --> B[Technical Signal Engine]
+    B --> C[Portfolio Signal Intelligence]
+    C --> D[Regime Detection & Diagnostics]
+    D --> E[Statistical Watchdog Engine]
+    E --> F[AI Reasoning Context]
+    F --> G[Interactive Research Dashboard]
 ```
 
-## Repository Structure
+## 🛠️ Key Frameworks
 
-- `app/data/`: Market ingestion and portfolio construction.
-- `app/quant/`: The analytical core (Signals, Backtester, Regimes, Diagnostics).
-- `app/reasoning/`: The AI orchestration layer and context loaders.
-- `app/ui/`: Streamlit dashboard implementation.
-- `docs/`: Technical architecture and implementation details.
-- `scratch/`: Official component verification scripts.
+### 🎯 Signal Intelligence
+Deterministic, triple-confirmation signals (RSI/MACD/BB) with bounded confidence scores and causal explanations.
+*   *Documentation*: [Signals Schema](docs/signals_schema.md)
 
-## Installation
+### 🚨 Statistical Watchdog
+Institutional-grade health monitoring detecting Sharpe decay, structural distribution shifts (KS-Test), and acute anomalies (Z-Score).
+*   *Documentation*: [Watchdog Framework](docs/watchdog_framework.md)
 
+### 🏢 Portfolio Intelligence
+Cross-asset signal ranking, market bias classification, and sector conviction clustering to surface concentrated opportunities.
+*   *Documentation*: [Portfolio Intelligence](docs/portfolio_intelligence.md)
+
+### 🤖 AI Reasoning
+A context-aware synthesis layer that fuses regimes, watchdog alerts, and signal intelligence to provide grounded research guidance.
+*   *Documentation*: [Reasoning Architecture](docs/reasoning_architecture.md)
+
+## ⚖️ Research Philosophy
+
+AlphaTrace is built on the principle of **Deterministic Integrity**:
+*   **Interpretability > Prediction**: Every output is mathematically traceable.
+*   **Contextual Awareness**: Intelligence is always framed by market regimes and operational health.
+*   **No Black-Boxes**: We avoid opaque ML models in favor of auditable quantitative logic.
+*   **Operational Intelligence**: Focus on the "Now" and strategy health, not speculative forecasting.
+
+## 📋 Getting Started
+
+### Installation
 ```bash
-# 1. Clone the repository
-git clone <repo-url>
-cd AlphaTrace
-
-# 2. Install dependencies
 pip install -r requirements.txt
 ```
 
-## Running the Project
-
-To launch the interactive research terminal:
-
+### Run the Research Dashboard
 ```bash
-python run_app.py
+streamlit run run_app.py
 ```
 
-## Quantitative Philosophy
+### Run Verification Suite
+AlphaTrace includes a comprehensive deterministic verification suite:
+```bash
+python3 scratch/verify_signal_generator.py
+python3 scratch/verify_watchdog.py
+python3 scratch/verify_portfolio_signals.py
+```
 
-AlphaTrace is built on **Deterministic Contracts**. Every analytical output—from Sharpe ratios to regime labels—is generated through reproducible, mathematically grounded pipelines. The AI layer acts as an interpretability bridge, never as a black-box signal generator.
+## 🛡️ Known Limitations
+*   No transaction-cost or slippage modeling.
+*   Static signal thresholds (not regime-adaptive).
+*   No autonomous execution or broker integration.
+*   Single timeframe (Daily) analysis.
 
 ---
-*AlphaTrace: Interpretable Intelligence for Quantitative Research.*
+*AlphaTrace is a research infrastructure tool. Past performance is not indicative of future results.*

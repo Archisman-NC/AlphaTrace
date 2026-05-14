@@ -33,6 +33,13 @@ from app.quant.diagnostics import (
     generate_strategy_diagnostics
 )
 from app.data.portfolio_builder import PORTFOLIOS
+from app.quant.portfolio_signals import (
+    scan_portfolio_signals,
+    generate_portfolio_signal_summary,
+    aggregate_sector_signals,
+    generate_signal_diagnostics,
+    portfolio_signal_reasoning_context
+)
 
 # Base Utilities (Safe to keep at top)
 from app.utils.helpers import safe_float
@@ -81,6 +88,7 @@ if "last_insight_topic" not in st.session_state: st.session_state.last_insight_t
 if "last_insight_turn" not in st.session_state: st.session_state.last_insight_turn = -2
 if "pending_prompt" not in st.session_state: st.session_state.pending_prompt = None
 if "watchdog_results" not in st.session_state: st.session_state.watchdog_results = None
+if "signal_results" not in st.session_state: st.session_state.signal_results = None
 
 PORTFOLIO_MAPPING = {
     "Rahul Sharma (Diversified)": "PORTFOLIO_001",
@@ -142,7 +150,7 @@ with st.sidebar:
             st.plotly_chart(fig, width="stretch")
 
 # --- Main Content Tabs ---
-tab_ai, tab_backtest, tab_watchdog = st.tabs(["💬 AI Copilot", "📊 Backtest Terminal", "🚨 Watchdog"])
+tab_ai, tab_backtest, tab_watchdog, tab_signals = st.tabs(["💬 AI Copilot", "📊 Backtest Terminal", "🚨 Watchdog", "🎯 Signals"])
 
 with tab_ai:
     # --- Chat Display ---
@@ -508,3 +516,158 @@ with tab_watchdog:
             st.code(ctx, language="text")
     else:
         st.info("Select a portfolio and run a health scan to evaluate operational risks.")
+
+with tab_signals:
+    st.header("🎯 Live Signal Intelligence")
+    st.caption("Context-aware portfolio signal intelligence and actionable opportunity surfacing.")
+    
+    # 1. Signal Scan Controls
+    scol1, scol2, scol3 = st.columns([2, 1, 1])
+    with scol1:
+        signal_p_label = st.selectbox(
+            "Portfolio for Signal Scan",
+            options=list(PORTFOLIO_MAPPING.keys()),
+            index=list(PORTFOLIO_MAPPING.values()).index(st.session_state.current_portfolio) if st.session_state.current_portfolio in PORTFOLIO_MAPPING.values() else 0,
+            key="signal_portfolio_select"
+        )
+        signal_pid = PORTFOLIO_MAPPING[signal_p_label]
+        
+    with scol2:
+        signal_window = st.selectbox(
+            "Indicator Lookback",
+            options=["3mo", "6mo", "1y", "2y"],
+            index=1,
+            help="Window for calculating technical indicators (RSI, MACD, etc.)."
+        )
+        
+    with scol3:
+        st.write("") # Spacer
+        sig_scan_btn = st.button("🚀 Generate Signals", use_container_width=True)
+
+    # 2. Pipeline Execution
+    if sig_scan_btn:
+        with st.spinner("Generating structured portfolio signals..."):
+            try:
+                p_data = PORTFOLIOS.get(signal_pid, {})
+                tickers = list(p_data.get("holdings", {}).keys())
+                
+                if not tickers:
+                    st.warning("No tickers found in the selected portfolio.")
+                else:
+                    ticker_data = {}
+                    for t in tickers:
+                        raw_df = fetch_ohlcv(t, period=signal_window)
+                        if not raw_df.empty:
+                            ticker_data[t] = compute_signals(raw_df)
+                    
+                    if ticker_data:
+                        # Run Portfolio Intelligence Pipeline
+                        signals = scan_portfolio_signals(ticker_data)
+                        summary = generate_portfolio_signal_summary(signals)
+                        sector_agg = aggregate_sector_signals(signals)
+                        diagnostics = generate_signal_diagnostics(signals, summary, sector_agg)
+                        
+                        st.session_state.signal_results = {
+                            "signals": [asdict(s) for s in signals],
+                            "summary": asdict(summary),
+                            "sector_agg": sector_agg,
+                            "diagnostics": diagnostics
+                        }
+                    else:
+                        st.error("Could not fetch market data for portfolio signals.")
+            except Exception as e:
+                logger.error(f"Signal scan failure: {e}")
+                st.error("Failed to generate signals. Check logs for details.")
+
+    # 3. Rendering Results
+    if st.session_state.signal_results:
+        res = st.session_state.signal_results
+        sum_data = res["summary"]
+        
+        # Portfolio Bias Header
+        st.divider()
+        bias = sum_data["market_bias"]
+        if bias == "BULLISH":
+            st.success(f"🟢 Portfolio Bias: {bias}")
+        elif bias == "BEARISH":
+            st.error(f"🔴 Portfolio Bias: {bias}")
+        elif bias == "MIXED":
+            st.warning(f"🟠 Portfolio Bias: {bias}")
+        else:
+            st.info(f"⚪ Portfolio Bias: {bias}")
+            
+        # Signal Metrics
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Top Confidence", f"{sum_data['average_confidence']:.2%}", help="Average confidence across all tickers.")
+        m2.metric("LONG Signals", sum_data["long_signals"])
+        m3.metric("SHORT Signals", sum_data["short_signals"])
+        m4.metric("Active Scan", f"{sum_data['total_signals']} Tickers")
+
+        # Opportunity Cards (Top 3)
+        st.subheader("💡 Top Opportunity Concentration")
+        valid_signals = [s for s in res["signals"] if s["direction"] != "NEUTRAL"]
+        if valid_signals:
+            cols = st.columns(min(len(valid_signals), 3))
+            for i, sig in enumerate(valid_signals[:3]):
+                with cols[i]:
+                    color = "green" if sig["direction"] == "LONG" else "red"
+                    st.markdown(f"""
+                    <div style="padding:15px; border-radius:10px; border:1px solid #444; background-color:#1e1e1e;">
+                        <h3 style="margin-top:0; color:{color};">{sig['ticker']}</h3>
+                        <p style="font-size:0.9em; color:#aaa;">{sig['direction']} | {sig['signal_strength']}</p>
+                        <p style="font-size:1.1em; font-weight:bold;">{sig['confidence']:.0%} Confidence</p>
+                        <p style="font-size:0.85em; margin-bottom:10px;">{sig['causal_reason'][:100]}...</p>
+                        <div style="font-family:monospace; font-size:0.8em; color:#00FFCC;">
+                            TP: {sig['take_profit']:.2f}<br>
+                            SL: {sig['stop_loss']:.2f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.info("No high-confidence directional signals detected.")
+
+        # Sector Conviction Visualization
+        st.divider()
+        st.subheader("🏢 Sector Conviction & Bias")
+        sector_df = pd.DataFrame.from_dict(res["sector_agg"], orient='index').reset_index()
+        sector_df.rename(columns={'index': 'Sector'}, inplace=True)
+        
+        if not sector_df.empty:
+            fig_sector = px.bar(
+                sector_df, 
+                x="Sector", y="avg_confidence", color="bias",
+                color_discrete_map={"Bullish": "#00FF00", "Bearish": "#FF0000", "Neutral": "#888888"},
+                title="Average Signal Confidence by Sector",
+                labels={"avg_confidence": "Avg Confidence", "bias": "Dominant Bias"}
+            )
+            fig_sector.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig_sector, use_container_width=True)
+        
+        # Signal Table & Diagnostics
+        st.divider()
+        dcol1, dcol2 = st.columns([2, 1])
+        with dcol1:
+            st.subheader("📋 Full Signal Inventory")
+            all_sig_df = pd.DataFrame(res["signals"])
+            # Reorder for UI
+            table_cols = ["ticker", "direction", "confidence", "signal_strength", "entry_price", "stop_loss", "take_profit"]
+            st.dataframe(all_sig_df[table_cols], use_container_width=True, hide_index=True)
+        
+        with dcol2:
+            st.subheader("🔍 Signal Diagnostics")
+            for diag in res["diagnostics"]:
+                st.info(diag)
+                
+        # AI Opportunity Context Preview
+        with st.expander("🤖 AI Opportunity Context (Internal View)"):
+            st.caption("This is the structured intelligence provided to the reasoning layer for cross-asset analysis.")
+            # Convert back to TradingSignal objects for the helper
+            from app.quant.signal_generator import TradingSignal
+            from app.quant.portfolio_signals import PortfolioSignalSummary
+            
+            mock_sigs = [TradingSignal(**s) for s in res["signals"]]
+            mock_sum = PortfolioSignalSummary(**sum_data)
+            ctx = portfolio_signal_reasoning_context(mock_sigs, mock_sum, res["diagnostics"])
+            st.code(ctx, language="text")
+    else:
+        st.info("Select a portfolio and generate signals to identify current market opportunities.")
