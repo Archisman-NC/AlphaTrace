@@ -3,6 +3,7 @@ pandas
 numpy
 scipy
 yfinance
+python-dotenv
 
 # --- Quantitative Analysis ---
 pandas-ta
