@@ -14,8 +14,11 @@ stable-baselines3
 gymnasium
 
 # --- AI & Reasoning ---
-# (Dependencies for LLM integration like openai, langchain, etc. if needed)
+openai
+groq
+langfuse
 
 # --- UI & Visualization ---
 streamlit
 plotly
+matplotlib
