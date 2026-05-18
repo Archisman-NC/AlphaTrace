@@ -71,6 +71,14 @@ def get_polish_response():
     from app.reasoning.response_polisher import polish_response
     return polish_response
 
+def get_classify_intent():
+    from app.reasoning.intent_classifier import classify_intent
+    return classify_intent
+
+def get_validate_and_route():
+    from app.reasoning.intent_validator import validate_and_route
+    return validate_and_route
+
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -183,8 +191,8 @@ with tab_ai:
                     session_wrapped = {"current_portfolio": st.session_state.current_portfolio, "memory": recent_mem}
                     
                     resolution = get_resolve_context()(active_prompt, session_wrapped)
-                    classification = classify_intent(resolution["resolved_query"], resolution["portfolio_id"], recent_mem)
-                    validation = validate_and_route(resolution["resolved_query"], classification)
+                    classification = get_classify_intent()(resolution["resolved_query"], resolution["portfolio_id"], recent_mem)
+                    validation = get_validate_and_route()(resolution["resolved_query"], classification)
 
                     if validation["action"] != "execute":
                         res_path = validation.get('reason', 'Could you clarify that?')
