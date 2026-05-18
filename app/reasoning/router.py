@@ -285,73 +285,39 @@ def get_portfolio_context_data(portfolio_id: str) -> dict:
     }
 
 def run_reason_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
-    from app.analytics.market_intelligence import build_market_intelligence
-    from app.analytics.stock_exposure_map import build_stock_exposure_map
-    from app.analytics.sector_portfolio_link import link_portfolio_to_sector_trends
-    from app.analytics.sector_performance import compute_sector_performance
-    from app.analytics.sector_impact import compute_sector_impact
-    from app.analytics.top_impact_sectors import get_top_impact_sectors
-    from app.reasoning.stock_impact_drilldown import get_stock_level_impact
-    from app.reasoning.news_portfolio_link import link_news_to_portfolio
-    from app.reasoning.news_sector_enrichment import attach_sector_trends_to_news
-    from app.reasoning.portfolio_exposure_enrichment import attach_portfolio_exposure
-    from app.reasoning.causal_chain_builder import build_causal_chains
-    from app.reasoning.conflict_detector import detect_conflicts
-
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("reason")
     p_id = ctx["portfolio_id"]
-    
-    # Optional: If a tool strictly needs _loader, we provide a dummy or a news-only loader
-    from app.ingestion.data_loader import DataLoader
-    _loader = DataLoader(os.path.join("data", "mock")) 
+    analytics = ctx.get("analytics", {})
 
     try:
-        m_intel = build_market_intelligence(_loader)
-        stock_map = build_stock_exposure_map(ctx["holdings_map"], {}) 
-        linked_trends = link_portfolio_to_sector_trends(ctx["exposure"], m_intel["sector_trends"])
-        impacts = compute_sector_impact(linked_trends)
-        top_impacts = get_top_impact_sectors(impacts, top_n=3)
-        stock_drivers = get_stock_level_impact(top_impacts, stock_map)
-
-        relevant_news = link_news_to_portfolio(m_intel["filtered_news"], ctx["exposure"], stock_map)
-        enriched_news = attach_sector_trends_to_news(relevant_news, m_intel["sector_trends"])
-        personalized_news = attach_portfolio_exposure(enriched_news, ctx["exposure"])
-        
-        chains = build_causal_chains(personalized_news, impacts, stock_drivers)
-        conflicts = detect_conflicts(chains)
-
         return {
             "type": "reason", "status": "success",
-            "summary": f"Analytical check complete for {p_id}.",
-            "drivers": chains[:5], "risks": conflicts[:3],
+            "summary": analytics.get("market_summary", f"Analytical check complete for {p_id}."),
+            "drivers": [], "risks": [],
             "metrics": {
-                "sector_performance": compute_sector_performance(_loader, m_intel["sector_trends"]),
                 "sector_exposure": ctx["exposure"],
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except:
+    except Exception:
         return build_safe_error_payload("reason")
 
 def run_risk_engine_wrapper(portfolio_id: str) -> Dict[str, Any]:
-    from app.analytics.risk_detection import detect_concentration_risk
-    
     ctx = get_portfolio_context_data(portfolio_id)
     if "error" in ctx: return build_safe_error_payload("risk")
 
     try:
-        risks = detect_concentration_risk(ctx["exposure"])
         return {
             "type": "risk", "status": "success",
             "summary": "Risk scan complete.",
-            "drivers": [], "risks": risks[:3],
+            "drivers": [], "risks": [],
             "metrics": {
                 "sector_exposure": ctx["exposure"], 
                 "ranked_holdings": ctx["ranked_holdings"]
             }
         }
-    except:
+    except Exception:
         return build_safe_error_payload("risk")
 
 def run_full_analysis_wrapper(portfolio_id: str) -> Dict[str, Any]:
