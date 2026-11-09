@@ -21,7 +21,7 @@ Configure these only for Vercel **Production**, not Preview. Preview builds inte
 ## Prepare and release
 
 1. Run `npm run typecheck`, `npm test`, `npm run test:documents`, `npm run test:research-edit`, and `npm run build`. Local integration tests use only loopback `TEST_*` settings.
-2. Apply migration `014_document_jobs.sql` with the administrative migration process, never the application connection. Keep prior checksums intact.
+2. Apply migrations through `015_guided_onboarding.sql` with the administrative migration process, never the application connection. Keep prior checksums intact.
 3. Run `npm run storage:setup` to create/configure the private `alphatrace-evidence-jobs` bucket. It limits objects to 20 MB and adds no public/anonymous access policies.
 4. Deploy `npm run trigger:deploy` and verify `alphatrace-process-document` plus the Production-only `alphatrace-clean-document-uploads` schedule. The worker packages Python and Poppler; Vercel does not need them.
 5. Run `npm run vercel:check`. Connect the repository to Vercel with Root Directory `web`, or deploy that directory using the CLI. Push the prepared app to GitHub before importing the repository into Vercel. Keep unrelated root artifacts out of the deployment.

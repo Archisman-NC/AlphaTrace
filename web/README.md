@@ -2,6 +2,18 @@
 
 The Next.js App Router app includes invited-account authentication, private portfolios and theses, reviewed shared research, a personal review inbox and journal exports. `/` redirects to the real-account workspace at `/workspace`; the browser-local illustrative sample is available at `/demo`; `/workspace?view=companies` manages holdings, watchlists and CSV imports. Human-reviewed TCS, Infosys and Wipro research is available to invited users. Recovery and a second real Auth account still need testing. No automatic invitations or broker integration is active. The legacy Python app also reads the consolidated local environment.
 
+## Guided onboarding
+
+New empty accounts see a three-step setup at `/workspace`. Existing accounts can open `/workspace?setup=1` or use the Guided setup link. Setup saves to the account after each Continue action, resumes after refresh, and can be skipped or reopened.
+
+1. Follow companies or preview a holdings CSV. Existing follows and unrelated holdings are preserved; explicitly confirmed imports replace quantities for included symbols.
+2. Optionally choose research interests. These prioritize the first available comparison and never create an investment thesis, filter the inbox, or enable notifications.
+3. Open a published comparison in the review inbox, or finish with a clear coverage gap. Opening research does not mark it reviewed.
+
+Apply migration `015_guided_onboarding.sql` before deploying this feature. It adds owner-isolated progress and a narrow database function exposing only monitoring symbol/enabled status. Provider data and operator controls retain their existing policies. `GET/POST /api/onboarding` require an invited account. Concurrent setup and portfolio edits are version checked and saved atomically.
+
+Validate with `npm test`, `node scripts/test-local.mjs tests/onboarding.integration.ts`, `npm run test:portfolio`, and `npm run build`. Browser checks use synthetic data in isolated local storage; no real account's preferences are prefilled.
+
 ## Local setup
 
 Requirements: Node 22 (see `.nvmrc`), npm, Docker Compose or PostgreSQL 18.3. The project pins dependencies and commits its npm lockfile. A project-local Node 22 binary is also included as a development dependency to support machines whose global Node is older; npm scripts use it automatically after installation.

@@ -16,6 +16,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
     "test:db": "node scripts/test-local.mjs tests/database.integration.ts",
     "test:portfolio": "node scripts/test-local.mjs tests/portfolio.integration.ts",
+    "test:onboarding": "node scripts/test-local.mjs tests/onboarding.integration.ts",
     "test:thesis": "node scripts/test-local.mjs tests/thesis.integration.ts",
     "test:research": "node scripts/test-local.mjs tests/research.integration.ts",
     "test:inbox": "node scripts/test-local.mjs tests/inbox.integration.ts",

@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { asUser } from './db';
 import { validateMutation,PortfolioConflictError,PortfolioInputError,type Portfolio } from './portfolio-input';
-async function snapshot(client:PoolClient,ownerId:string):Promise<Portfolio> {
+export async function portfolioSnapshot(client:PoolClient,ownerId:string):Promise<Portfolio> {
  const workspace=await client.query('SELECT portfolio_version FROM alphatrace.workspaces WHERE owner_id=$1',[ownerId]);
  const rows=await client.query('SELECT symbol, quantity::text, followed FROM alphatrace.portfolio_entries WHERE owner_id=$1 ORDER BY symbol',[ownerId]);
  return {version:workspace.rows[0]?.portfolio_version??0,entries:rows.rows};
@@ -11,7 +11,7 @@ export async function getPortfolio(ownerId:string):Promise<Portfolio> {
   // Lock the parent when present so rows and version describe the same snapshot.
   const parent=await client.query('SELECT id FROM alphatrace.workspaces WHERE owner_id=$1 FOR SHARE',[ownerId]);
   if(!parent.rowCount)return {version:0,entries:[]};
-  return snapshot(client,ownerId);
+  return portfolioSnapshot(client,ownerId);
  });
 }
 export async function updatePortfolio(ownerId:string,input:unknown):Promise<Portfolio> {
@@ -39,6 +39,6 @@ export async function updatePortfolio(ownerId:string,input:unknown):Promise<Port
    }
   }
   await client.query('UPDATE alphatrace.workspaces SET portfolio_version=portfolio_version+1,updated_at=now() WHERE owner_id=$1',[ownerId]);
-  return snapshot(client,ownerId);
+  return portfolioSnapshot(client,ownerId);
  });
 }
