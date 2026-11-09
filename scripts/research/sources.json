@@ -1,0 +1,432 @@
+[
+  {
+    "schemaVersion": 1,
+    "symbol": "TCS",
+    "title": "Q2 FY27: reported revenue, deal wins and workforce",
+    "periodEnd": "2026-09-30",
+    "comparison": "QoQ",
+    "extractorVersion": "rules-2026q2-v1",
+    "sources": [
+      {
+        "id": "tcs-q2",
+        "title": "TCS Q2 FY27 results and IFRS statements",
+        "url": "https://www.tcs.com/who-we-are/newsroom/press-release/tcs-financial-results-q2-fy-2027",
+        "kind": "results",
+        "publishedOn": "2026-10-08",
+        "pages": 1,
+        "mediaType": "text/html",
+        "assertions": [
+          "October 8, 2026",
+          "quarter ending September 30, 2026",
+          "IFRS",
+          "Excludes exceptional items"
+        ]
+      },
+      {
+        "id": "tcs-q1",
+        "title": "TCS Q1 FY27 results release",
+        "url": "https://www.tcs.com/who-we-are/newsroom/press-release/tcs-financial-results-q1-fy-2027",
+        "kind": "release",
+        "publishedOn": "2026-07-09",
+        "pages": 1,
+        "mediaType": "text/html",
+        "assertions": [
+          "July 9, 2026",
+          "quarter ending June 30, 2026",
+          "IFRS",
+          "Excludes exceptional item"
+        ]
+      }
+    ],
+    "comparisons": [
+      {
+        "metric": "revenue",
+        "previous": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q1",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Q1 Revenue at US\\$ ([\\d,]+) million;",
+            "group": 1
+          }
+        },
+        "current": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q2",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Q2 Revenue at \\$([\\d,]+) Mn;",
+            "group": 1
+          }
+        },
+        "note": "Reported USD revenue; this differs from constant-currency growth."
+      },
+      {
+        "metric": "deal_tcv",
+        "previous": {
+          "unit": "USD billion",
+          "basis": "consolidated",
+          "standard": "operational",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q1",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Q1 Total Contract Value \\(TCV\\): US\\$ ([\\d.]+) billion",
+            "group": 1
+          }
+        },
+        "current": {
+          "unit": "USD billion",
+          "basis": "consolidated",
+          "standard": "operational",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q2",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Q2 Total Contract Value \\(TCV\\): US\\$ ([\\d.]+) billion",
+            "group": 1
+          }
+        },
+        "note": "Deal TCV is a company-reported operating measure, not recognized revenue."
+      },
+      {
+        "metric": "employees",
+        "previous": {
+          "unit": "people",
+          "basis": "consolidated",
+          "standard": "operational",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "point_in_time",
+          "sourceId": "tcs-q1",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Workforce strength: ([\\d,]+);",
+            "group": 1
+          }
+        },
+        "current": {
+          "unit": "people",
+          "basis": "consolidated",
+          "standard": "operational",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "point_in_time",
+          "sourceId": "tcs-q2",
+          "locator": "Quarterly financial highlights",
+          "page": null,
+          "extract": {
+            "pattern": "Workforce strength: ([\\d,]+);",
+            "group": 1
+          }
+        },
+        "note": "Workforce at each quarter end; a higher count is not itself a performance judgement."
+      },
+      {
+        "metric": "operating_profit",
+        "previous": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "excluding exceptional items",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q2",
+          "locator": "Consolidated income statement; June column marked *; footnote excludes exceptional items",
+          "page": null,
+          "extract": {
+            "pattern": "Operating income\\s*\\|?\\s*1,879\\s*\\|?\\s*([\\d,]+)\\s*\\|?\\s*1,833",
+            "group": 1
+          }
+        },
+        "current": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "tcs-q2",
+          "locator": "Consolidated income statement; September 2026 column",
+          "page": null,
+          "extract": {
+            "pattern": "Operating income\\s*\\|?\\s*1,879\\s*\\|?\\s*1,826\\s*\\|?\\s*([\\d,]+)",
+            "group": 1
+          }
+        },
+        "note": "Prior-period treatment differs. No growth rate is calculated."
+      }
+    ],
+    "limitations": [
+      "The revenue comparison uses reported USD, so it includes currency effects.",
+      "Prior-period operating profit excludes exceptional items; the current column is unmarked. A like-for-like profit comparison requires reconciliation.",
+      "TCV and employee count provide operating context. They do not establish future revenue, earnings quality or investment value.",
+      "This is a limited quarterly comparison. It does not include valuations, full cash-flow analysis or a recommendation."
+    ],
+    "crossChecks": []
+  },
+  {
+    "schemaVersion": 1,
+    "symbol": "INFY",
+    "title": "Q2 FY27: revenue, operating profit and margin",
+    "periodEnd": "2026-09-30",
+    "comparison": "QoQ",
+    "extractorVersion": "rules-2026q2-v1",
+    "sources": [
+      {
+        "id": "infy-facts",
+        "title": "Infosys Q2 FY27 fact sheet",
+        "url": "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q2/documents/fact-sheet.pdf",
+        "kind": "facts",
+        "publishedOn": "2026-10-23",
+        "pages": 4,
+        "mediaType": "application/pdf",
+        "assertions": [
+          "Fiscal 2027",
+          "three months ended",
+          "In US \\$ million",
+          "Jun 30, 2026",
+          "Net profit \\(after non-controlling interests\\)"
+        ]
+      },
+      {
+        "id": "infy-results",
+        "title": "Infosys Q2 FY27 consolidated IFRS financial statements",
+        "url": "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q2/documents/ifrs-usd-earnings-release.pdf",
+        "kind": "results",
+        "publishedOn": "2026-10-23",
+        "pages": 36,
+        "mediaType": "application/pdf",
+        "assertions": [
+          "IFRS",
+          "US Dollars",
+          "October 23, 2026",
+          "Three months ended",
+          "September 30, 2026"
+        ]
+      }
+    ],
+    "comparisons": [
+      {
+        "metric": "revenue",
+        "previous": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(5,145) 5,076 1\\.3% (5,082) 1\\.2%",
+            "group": 2
+          }
+        },
+        "current": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(5,145) 5,076 1\\.3% (5,082) 1\\.2%",
+            "group": 1
+          }
+        },
+        "note": "Reported consolidated IFRS values in USD."
+      },
+      {
+        "metric": "operating_profit",
+        "previous": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(1,079) 1,065 1\\.3% (1,072) 0\\.7%",
+            "group": 2
+          }
+        },
+        "current": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(1,079) 1,065 1\\.3% (1,072) 0\\.7%",
+            "group": 1
+          }
+        },
+        "note": "Reported consolidated IFRS values in USD."
+      },
+      {
+        "metric": "net_profit",
+        "previous": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(817) 839 -2\\.5% (819) -0\\.2%",
+            "group": 2
+          }
+        },
+        "current": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(817) 839 -2\\.5% (819) -0\\.2%",
+            "group": 1
+          }
+        },
+        "note": "Profit attributable to owners; excludes non-controlling interests."
+      },
+      {
+        "metric": "operating_margin",
+        "previous": {
+          "unit": "%",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-06-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(21\\.0) 21\\.0 0\\.0% (21\\.1) -0\\.1%",
+            "group": 2
+          }
+        },
+        "current": {
+          "unit": "%",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-facts",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "(21\\.0) 21\\.0 0\\.0% (21\\.1) -0\\.1%",
+            "group": 1
+          }
+        },
+        "note": "Difference is expressed in percentage points, using the published rounded margins."
+      }
+    ],
+    "limitations": [
+      "Reported USD growth includes currency effects; it is not constant-currency growth.",
+      "Prior-quarter values are taken directly from the fact sheet. Half-year totals are not used to reconstruct quarter values because rounding can differ.",
+      "The financial-statement PDF includes both three-month and six-month columns. This comparison uses quarterly figures only.",
+      "This comparison covers selected reported metrics, not valuation, sustainability of earnings or a trade recommendation."
+    ],
+    "crossChecks": [
+      {
+        "metric": "revenue",
+        "side": "current",
+        "point": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-results",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "Revenues 2\\.16 ([\\d,]+) 5,076",
+            "group": 1
+          }
+        }
+      },
+      {
+        "metric": "operating_profit",
+        "side": "current",
+        "point": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-results",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "Operating profit ([\\d,]+) 1,065",
+            "group": 1
+          }
+        }
+      },
+      {
+        "metric": "net_profit",
+        "side": "current",
+        "point": {
+          "unit": "USD million",
+          "basis": "consolidated",
+          "standard": "IFRS",
+          "treatment": "reported",
+          "periodEnd": "2026-09-30",
+          "periodType": "quarter",
+          "sourceId": "infy-results",
+          "locator": "Physical PDF page 3, three-month income statement; September and June 2026 columns",
+          "page": 3,
+          "extract": {
+            "pattern": "Profit attributable to: Owners of the Company ([\\d,]+) 839",
+            "group": 1
+          }
+        }
+      }
+    ]
+  }
+]

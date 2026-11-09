@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { databaseConfig } from '../src/lib/database-config.mjs';
+import { asUser,closeDatabase } from '../src/lib/db';
+import { ingestResearch,getResearch,reviewResearch } from '../src/lib/research';
+import { reviseResearch } from '../src/lib/research-edit';
+import { attachResearchSource,checkResearchSources } from '../src/lib/research-source';
+import { fixture,check } from './research-fixture';
+if(!['127.0.0.1','localhost'].includes(new URL(process.env.MIGRATION_DATABASE_URL!).hostname))throw Error('Use the isolated local test database.');
+const owner=randomUUID(),reader=randomUUID(),admin=new pg.Client(databaseConfig(process.env.MIGRATION_DATABASE_URL));await admin.connect();
+try{
+ await admin.query('INSERT INTO alphatrace.research_operators(user_id) VALUES($1)',[owner]);
+ const p=fixture('SYNTHETIC EDIT '+owner),base=await ingestResearch(owner,{draft:p,check:check(p)});
+ await reviewResearch(owner,{action:'approve',id:base.draftId,note:'Checked the synthetic integration fixture',evidenceConfirmed:true,basisConfirmed:true});
+ const edited=structuredClone(p);edited.comparisons[0].current.value='140';
+ const command={id:base.draftId,payload:edited,reason:'Correcting the synthetic revenue value'};
+ await assert.rejects(reviseResearch(reader,command),/operator/);
+ const forged=structuredClone(edited);forged.sources[0].sha256='a'.repeat(64);await assert.rejects(reviseResearch(owner,{...command,payload:forged}),/Attach each/);
+ const saved=await Promise.all([reviseResearch(owner,command),reviseResearch(owner,command)]);assert.equal(saved[0].id,saved[1].id);
+ const current=saved[0].id;
+ const states=(await admin.query('SELECT id,state,payload,reviewed_at FROM alphatrace.research_drafts WHERE id=ANY($1)',[[base.draftId,current]])).rows;
+ assert.equal(states.find(r=>r.id===base.draftId).state,'approved');assert.equal(states.find(r=>r.id===base.draftId).payload.comparisons[0].current.value,'125');assert.equal(states.find(r=>r.id===current).state,'draft');assert.equal(states.find(r=>r.id===current).reviewed_at,null);
+ await assert.rejects(reviewResearch(owner,{action:'publish',id:base.draftId}),/newer correction/);
+ await assert.rejects(reviewResearch(owner,{action:'publish',id:current}),/Approve/);
+ await assert.rejects(reviseResearch(owner,{...command,payload:{...edited,title:'Conflicting edit'}}),/already has a correction/);
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_checks WHERE recorded_by=$1',[owner])).rows[0].n,1);
+ const draft=(await getResearch(owner,'TCS',true)).drafts.find((d:{id:string})=>d.id===current);assert.equal(draft.parent_id,base.draftId);assert.match(draft.changes.join(),/current value/);
+ const attachment=await attachResearchSource(owner,{id:current,url:'https://www.tcs.com/synthetic-support',title:'Synthetic uploaded page',kind:'facts',publishedOn:'2026-10-08'},new File(['<html><body>Explicit synthetic evidence test</body></html>'],'source.html',{type:'text/html'}));
+ const withFile={...edited,sources:[attachment.source],comparisons:edited.comparisons.map(c=>({...c,previous:{...c.previous,sourceId:attachment.source.id},current:{...c.current,sourceId:attachment.source.id}}))};
+ const next=await reviseResearch(owner,{id:current,payload:withFile,reason:'Attach a synthetic original and retain source locations'});
+ const repeatAttachment=await attachResearchSource(owner,{id:next.id,sourceId:attachment.source.id,url:attachment.source.url,title:attachment.source.title,kind:'facts',publishedOn:'2026-10-08'},new File(['<html><body>Explicit synthetic evidence test</body></html>'],'source.html',{type:'text/html'}));
+ assert.equal(repeatAttachment.source.fetchedAt,attachment.source.fetchedAt,'Rechecking identical bytes preserves the original draft retrieval timestamp.');
+ await checkResearchSources(owner,next.id);
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_checks WHERE recorded_by=$1',[owner])).rows[0].n,2);
+ for(const table of ['research_revisions','research_attachments'])assert.equal(await asUser(reader,async c=>(await c.query(`SELECT * FROM alphatrace.${table}`)).rowCount),0);
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_updates WHERE published_by=$1',[owner])).rows[0].n,0);
+ console.log('PASS: immutable revisions, approval reset, concurrent-save idempotency, stale edit rejection, source receipt validation, original-file inspection, exact source checking and operator isolation.');
+}finally{
+ await closeDatabase();await admin.query('DELETE FROM alphatrace.research_revisions WHERE created_by=$1',[owner]);await admin.query('DELETE FROM alphatrace.research_attachments WHERE created_by=$1',[owner]);await admin.query('DELETE FROM alphatrace.research_drafts WHERE created_by=$1',[owner]);await admin.query('DELETE FROM alphatrace.research_checks WHERE recorded_by=$1',[owner]);await admin.query('DELETE FROM alphatrace.research_operators WHERE user_id=$1',[owner]);await admin.end();
+}

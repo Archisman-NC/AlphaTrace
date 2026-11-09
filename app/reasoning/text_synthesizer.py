@@ -3,9 +3,10 @@ import json
 import logging
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 
 logger = logging.getLogger(__name__)
 

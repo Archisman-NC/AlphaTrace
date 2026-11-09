@@ -5,11 +5,12 @@ import time
 from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 from app.utils.helpers import langfuse
 
 from app.evaluation.llm_evaluator import evaluate_response
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 logger = logging.getLogger(__name__)
 
 STRUCTURES = {

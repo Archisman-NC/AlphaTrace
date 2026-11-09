@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {randomUUID,createHash} from 'node:crypto';
+import pg from 'pg';
+import {databaseConfig} from '../src/lib/database-config.mjs';
+import {asUser,closeDatabase} from '../src/lib/db';
+import {createDocumentJob,getDocumentJob,queueDocumentJob,claimDocumentJob,finishDocumentJob} from '../src/lib/document-jobs';
+import {processDocumentJob} from '../src/lib/document-processor';
+import {ingestResearch} from '../src/lib/research';
+import {fixture,check} from './research-fixture';
+if(!['127.0.0.1','localhost'].includes(new URL(process.env.MIGRATION_DATABASE_URL!).hostname))throw Error('Use the isolated local database.');
+const admin=new pg.Client(databaseConfig(process.env.MIGRATION_DATABASE_URL));await admin.connect();
+const owner=randomUUID(),other=randomUUID(),reader=randomUUID(),owners=[owner,other];
+const bytes=Buffer.from('<html><body>SYNTHETIC document workflow test. Not company research.</body></html>');
+const file={field:'file',name:'source.html',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+try{
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.document_jobs')).rows[0].n,0);
+ for(const id of owners)await admin.query('INSERT INTO alphatrace.research_operators(user_id) VALUES($1)',[id]);
+ const p=fixture('SYNTHETIC document workflow '+owner),draft=await ingestResearch(owner,{draft:p,check:check(p)});
+ const command={commandId:randomUUID(),kind:'attach',input:{id:draft.draftId,url:'https://www.tcs.com/synthetic-document',title:'Synthetic test original',publishedOn:'2026-10-08',kind:'facts'},files:[file]};
+ await assert.rejects(createDocumentJob(reader,command),/operator/);
+ const jobs=await Promise.all([createDocumentJob(owner,command),createDocumentJob(owner,command)]);assert.equal(jobs[0].id,jobs[1].id);
+ const id=jobs[0].id;
+ await assert.rejects(createDocumentJob(owner,{...command,input:{...command.input,title:'Different'}}),/different files/);
+ await assert.rejects(getDocumentJob(other,id),/not found/);
+ assert.equal(await asUser(reader,async c=>(await c.query('SELECT * FROM alphatrace.document_jobs')).rowCount),0);
+ await queueDocumentJob(owner,id);
+ assert.deepEqual(await processDocumentJob(owner,id,'run_documenttest000001',async()=>Buffer.alloc(bytes.length)),{claimed:true,succeeded:false});
+ assert.equal((await getDocumentJob(owner,id)).state,'failed');
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_attachments WHERE created_by=$1',[owner])).rows[0].n,0);
+ const good=await createDocumentJob(owner,{...command,commandId:randomUUID()});await queueDocumentJob(owner,good.id);
+ const completed=await processDocumentJob(owner,good.id,'run_documenttest000002',async()=>bytes);assert.equal(completed.succeeded,true);
+ const saved=await getDocumentJob(owner,good.id);assert.equal(saved.result.source.sha256,file.sha256);assert.equal(saved.state,'succeeded');
+ assert.deepEqual(await processDocumentJob(owner,good.id,'run_documenttest000003',async()=>{throw Error('Must not download twice');}),{claimed:false});
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_attachments WHERE created_by=$1',[owner])).rows[0].n,1);
+ assert.equal((await admin.query('SELECT state FROM alphatrace.research_drafts WHERE id=$1',[draft.draftId])).rows[0].state,'draft');
+ assert.equal((await admin.query('SELECT count(*)::int n FROM alphatrace.research_updates WHERE published_by=$1',[owner])).rows[0].n,0);
+ const expired=await createDocumentJob(owner,{...command,commandId:randomUUID()});await admin.query("UPDATE alphatrace.document_jobs SET expires_at=now()-interval '1 second' WHERE id=$1",[expired.id]);assert.equal((await getDocumentJob(owner,expired.id)).state,'expired');await queueDocumentJob(owner,expired.id);assert.equal(await claimDocumentJob(owner,expired.id,'run_documenttest000004'),undefined);
+ const claimed=await createDocumentJob(owner,{...command,commandId:randomUUID()});await queueDocumentJob(owner,claimed.id);
+ const claims=await Promise.all([claimDocumentJob(owner,claimed.id,'run_documenttest000005'),claimDocumentJob(owner,claimed.id,'run_documenttest000006')]);assert.equal(claims.filter(Boolean).length,1);
+ await admin.query("UPDATE alphatrace.document_jobs SET lease_until=now()-interval '1 second' WHERE id=$1",[claimed.id]);assert.equal(await finishDocumentJob(owner,claimed.id,'run_documenttest000005',{}),false);assert.equal((await getDocumentJob(owner,claimed.id)).state,'expired');
+ const quota=await Promise.allSettled(Array.from({length:8},(_,i)=>createDocumentJob(i%2?other:owner,{...command,commandId:randomUUID()})));assert.equal(quota.filter(v=>v.status==='fulfilled').length,6);assert.equal(quota.filter(v=>v.status==='rejected').length,2);
+ console.log('PASS: document ownership, RLS, idempotency, hashes, successful private-file processing, single worker claim, expiry, shared quota and no automatic publication.');
+}finally{
+ await closeDatabase();await admin.query('DELETE FROM alphatrace.document_jobs WHERE owner_id=ANY($1)',[owners]);await admin.query('DELETE FROM alphatrace.research_attachments WHERE created_by=ANY($1)',[owners]);await admin.query('DELETE FROM alphatrace.research_drafts WHERE created_by=ANY($1)',[owners]);await admin.query('DELETE FROM alphatrace.research_checks WHERE recorded_by=ANY($1)',[owners]);await admin.query('DELETE FROM alphatrace.research_operators WHERE user_id=ANY($1)',[owners]);await admin.end();
+}

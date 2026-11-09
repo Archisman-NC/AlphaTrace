@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { databaseConfig } from '../src/lib/database-config.mjs';
+import { asUser,closeDatabase } from '../src/lib/db';
+import { syncInbox,getInbox,getInboxDetail,reviewInbox } from '../src/lib/inbox';
+import { updatePortfolio } from '../src/lib/portfolios';
+import { saveThesis, getThesis } from '../src/lib/theses';
+import { emptyThesis } from '../src/lib/thesis-input';
+import { ingestResearch,reviewResearch,getResearch } from '../src/lib/research';
+import { fixture,check } from './research-fixture';
+import { exportJournal } from '../src/lib/journal';
+import { journalFile } from '../src/lib/journal-format';
+
+const alice=randomUUID(),bob=randomUUID(),outsider=randomUUID(),operator=randomUUID();
+const admin=new pg.Client(databaseConfig(process.env.MIGRATION_DATABASE_URL));
+const published:string[]=[],drafts:string[]=[];let checkIndex=0;
+await admin.connect();
+async function publish(label:string,approveOnly=false){
+ const p=fixture('SYNTHETIC inbox '+operator+' '+label);p.symbol='WIPRO';p.sources.forEach((s,i)=>s.url=`https://www.wipro.com/synthetic-${i}`);
+ const d=await ingestResearch(operator,{draft:p,check:check(p,Date.now()-120000+(checkIndex++))});drafts.push(d.draftId!);
+ await reviewResearch(operator,{action:'approve',id:d.draftId,note:'Synthetic fixture reviewed for integration only',evidenceConfirmed:true,basisConfirmed:true});
+ if(approveOnly)return d.draftId!;
+ const u=await reviewResearch(operator,{action:'publish',id:d.draftId});published.push(u.id);return u.id;
+}
+try{
+ await admin.query('INSERT INTO alphatrace.research_operators(user_id) VALUES ($1)',[operator]);
+ await updatePortfolio(alice,{version:0,command:{type:'follow',symbol:'WIPRO',followed:true}});
+ await updatePortfolio(bob,{version:0,command:{type:'holding',symbol:'WIPRO',quantity:'2'}});
+ const assumption={id:randomUUID(),statement:'PRIVATE SYNTHETIC belief '+alice,metric:'Revenue growth',baseline:'100 in a synthetic quarter',direction:'up',horizon:'Two quarters',reviewCondition:'Review my own condition'};
+ const payload={...emptyThesis(),thesis:'PRIVATE SYNTHETIC reasoning '+alice,assumptions:[assumption]};
+ await saveThesis(alice,{symbol:'WIPRO',version:0,commandId:randomUUID(),payload,reason:'Initial synthetic reasoning',confirmed:true});
+ await publish('draft only',true);assert.equal((await syncInbox(alice)).added,0,'approved drafts cannot enter the inbox');
+ const update=await publish('first');
+ const synced=await Promise.all([syncInbox(alice),syncInbox(alice)]);assert.equal(synced.reduce((n,s)=>n+s.added,0),1,'concurrent catch-up must deduplicate');
+ assert.equal((await syncInbox(alice)).added,0);
+ assert.equal((await syncInbox(bob)).added,1,'holdings receive general updates without assumptions');
+ assert.equal((await syncInbox(outsider)).added,0);
+ let detail=await getInboxDetail(alice,update);
+ assert.equal(detail.snapshot.matches.length,1);assert.equal(detail.snapshot.thesis?.version,1);
+ assert.equal((await getInboxDetail(bob,update)).snapshot.matches.length,0);
+ await assert.rejects(getInboxDetail(outsider,update),/unavailable/);
+ assert.equal(await asUser(bob,async c=>(await c.query('SELECT * FROM alphatrace.review_items WHERE owner_id=$1',[alice])).rowCount),0);
+ await assert.rejects(asUser(bob,c=>c.query("INSERT INTO alphatrace.review_items(owner_id,update_id,snapshot) VALUES ($1,$2,'{}')",[alice,update])),/row-level security/);
+ await assert.rejects(asUser(alice,c=>c.query("UPDATE alphatrace.review_items SET snapshot='{}' WHERE owner_id=$1",[alice])),/permission denied/);
+ const command={updateId:update,commandId:randomUUID(),version:0,action:'keep',note:'My original view remains unchanged.'};
+ detail=await reviewInbox(alice,command);assert.equal(detail.item.state,'kept');assert.equal(detail.events.length,1);
+ assert.equal((await reviewInbox(alice,command)).events.length,1,'retry must not append');
+ await assert.rejects(reviewInbox(alice,{...command,note:'Different response wording'}),/identifier/);
+ assert.equal((await getThesis(alice,'WIPRO')).version,1,'keep does not edit a thesis');
+ assert.equal((await getInbox(alice,'reviewed')).counts.reviewed,1);
+ assert.equal((await getInbox(bob)).counts.pending,1,'decisions do not affect another owner');
+ const writers=await Promise.allSettled(['First response','Second response'].map(note=>reviewInbox(alice,{...command,commandId:randomUUID(),version:1,action:'reopen',note})));
+ assert.equal(writers.filter(r=>r.status==='fulfilled').length,1);assert.equal(writers.filter(r=>r.status==='rejected').length,1);
+ const tomorrow=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
+ const defer={...command,commandId:randomUUID(),version:2,action:'defer',deferUntil:tomorrow};
+ await reviewInbox(alice,defer);assert.equal((await getInbox(alice,'deferred')).items.length,1);assert.equal((await getInbox(alice,'pending')).items.length,0);
+ await admin.query("UPDATE alphatrace.review_items SET revisit_at=now()-interval '1 minute' WHERE owner_id=$1 AND update_id=$2",[alice,update]);
+ assert.equal((await getInbox(alice,'pending')).items.length,1,'due deferrals reappear without rewriting history');
+ assert.equal((await getInboxDetail(alice,update)).events.length,3);
+ await saveThesis(alice,{symbol:'WIPRO',version:1,commandId:randomUUID(),payload:{...payload,thesis:'PRIVATE SYNTHETIC revised reasoning',evidenceIds:[update]},reason:'Reconsidered after the exact publication',confirmed:true});
+ detail=await getInboxDetail(alice,update);assert.equal(detail.canRecordRevision,true);
+ await reviewInbox(alice,{...command,commandId:randomUUID(),version:3,action:'revise',thesisVersion:2});
+ detail=await getInboxDetail(alice,update);assert.equal(detail.events[0].thesis_revision?.version,2);assert.equal(detail.snapshot.thesis?.payload.thesis,payload.thesis,'original reasoning remains immutable');
+ assert.equal(detail.canRecordRevision,false,'cannot record the same revision twice');
+ await assert.rejects(asUser(alice,c=>c.query("UPDATE alphatrace.review_events SET note='tampered' WHERE owner_id=$1",[alice])),/permission denied/);
+ assert.equal(await asUser(bob,async c=>(await c.query('SELECT * FROM alphatrace.review_events WHERE owner_id=$1',[alice])).rowCount),0);
+ assert.equal(JSON.stringify(await getResearch(bob,'WIPRO')).includes(payload.thesis),false);
+ const corrected=await publish('corrected version');assert.equal((await syncInbox(alice)).added,1);
+ assert.equal((await getInboxDetail(alice,update)).item.newer_update_id,corrected);
+ assert.equal((await getInboxDetail(alice,corrected)).item.state,'unreviewed');
+ await reviewResearch(operator,{action:'withdraw',id:update,note:'Synthetic withdrawal for review safeguards'});
+ assert.ok((await getInboxDetail(alice,update)).publication.withdrawn_at);
+ await assert.rejects(reviewInbox(alice,{...command,commandId:randomUUID(),version:4}),/withdrawn/);
+ await updatePortfolio(alice,{version:1,command:{type:'follow',symbol:'WIPRO',followed:false}});
+ await publish('after unfollow');assert.equal((await syncInbox(alice)).added,0);assert.equal((await getInbox(alice,'all')).counts.all,2,'unfollow preserves existing history');
+ await closeDatabase();assert.equal((await getInboxDetail(alice,update)).events.length,4,'responses survive reconnect');
+ // Bounded catch-up and tied timestamp pagination: 51 synthetic versions for Bob.
+ for(let n=0;n<49;n++)await publish('pagination '+n);
+ assert.equal((await syncInbox(bob)).added,50);
+ assert.equal((await syncInbox(bob)).added,1);
+ assert.equal((await syncInbox(bob)).added,0);
+ let cursor:string|null=null,ids:string[]=[];
+ do{const page=await getInbox(bob,'all',cursor);ids.push(...page.items.map(i=>i.update_id));cursor=page.nextCursor;}while(cursor);
+ assert.equal(ids.length,52);assert.equal(new Set(ids).size,52,'pagination cannot skip/duplicate tied timestamp rows');
+ // Event pagination and response retries preserve exact history.
+ for(let version=0;version<22;version++)await reviewInbox(bob,{updateId:corrected,commandId:randomUUID(),version,action:'dismiss',note:'Synthetic paginated response '+version});
+ const recent=await getInboxDetail(bob,corrected);assert.equal(recent.events.length,20);assert.equal(recent.hasMoreEvents,true);
+ assert.deepEqual((await getInboxDetail(bob,corrected,recent.events.at(-1)!.version)).events.map(e=>e.version),[2,1]);
+ // Export must include history beyond the UI's 25-item/20-event pages,
+ // but only publications actually referenced by this owner's saved records.
+ const journal=await exportJournal(bob),aliceJournal=await exportJournal(alice),empty=await exportJournal(randomUUID());
+ assert.equal(journal.complete,true);assert.equal(journal.reviews.length,52);assert.equal(journal.reviewEvents.length,22);assert.equal(journal.publications.length,52);
+ assert.equal(journal.portfolio[0].quantity,'2.000000');
+ assert.equal(journal.thesisRevisions.length,0);assert.equal(JSON.stringify(journal).includes(assumption.statement),false);
+ assert.equal(JSON.stringify(aliceJournal).includes('Synthetic paginated response'),false);
+ assert.equal(aliceJournal.thesisRevisions.length,2);assert.equal(aliceJournal.reviewEvents.length,4);
+ assert.equal(aliceJournal.publications.length,2,'do not include unreferenced or draft publications');
+ assert.equal(aliceJournal.publications.find(p=>p.id===update)?.withdrawal_reason,'Synthetic withdrawal for review safeguards');
+ assert.equal(aliceJournal.publications.find(p=>p.id===update)?.newer_update_id,published.at(-1));
+ assert.equal(aliceJournal.reviews[0].snapshot.thesis?.payload.thesis,payload.thesis);
+ assert.equal(empty.workspace,null);assert.equal(empty.publications.length,0);assert.equal(empty.sourceChecks.length,0);
+ const json=journalFile(aliceJournal,'json'),markdown=journalFile(aliceJournal,'md');
+ assert.equal(JSON.parse(json.content).reviewEvents.length,4);
+ assert.ok(markdown.content.includes('Original research when this review was created'));
+ assert.ok(markdown.content.includes('Synthetic withdrawal for review safeguards'));
+ assert.ok(!json.content.includes('command_id'));assert.ok(!json.content.includes('owner_id'));assert.ok(!json.content.includes('created_by'));
+ await asUser(bob,async c=>{
+  const before=(await c.query('SELECT quantity::text FROM alphatrace.portfolio_entries WHERE owner_id=$1',[bob])).rows[0].quantity;
+  await updatePortfolio(bob,{version:1,command:{type:'holding',symbol:'WIPRO',quantity:'3'}});
+  const after=(await c.query('SELECT quantity::text FROM alphatrace.portfolio_entries WHERE owner_id=$1',[bob])).rows[0].quantity;
+  assert.equal(after,before,'export transaction must retain a single snapshot across concurrent writes');
+ },{readOnlySnapshot:true});
+ await assert.rejects(asUser(bob,c=>c.query("UPDATE alphatrace.workspaces SET name='write forbidden' WHERE owner_id=$1",[bob]),{readOnlySnapshot:true}),/read-only transaction/);
+ assert.equal((await exportJournal(bob)).portfolio[0].quantity,'3.000000');
+ await admin.query(`INSERT INTO alphatrace.private_research_revisions(owner_id,symbol,version,command_id,payload,reason)
+  SELECT $1,'WIPRO',n,gen_random_uuid(),$2::jsonb,'Synthetic export limit' FROM generate_series(3,5001) n`,[alice,JSON.stringify(payload)]);
+ await assert.rejects(exportJournal(alice),/No partial file/);
+ console.log('PASS: complete journal export, exact quantities, owner isolation, historical evidence/withdrawals, no drafts or internal identities, empty accounts, snapshot consistency, read-only transactions and explicit oversize failure.');
+ console.log('PASS: inbox deduplication, topic snapshots, general updates, owner isolation, immutable history, retries/conflicts, defer/due, explicit revisions, corrections/withdrawal, unfollow retention and bounded pagination.');
+}finally{
+ await closeDatabase();await admin.query('BEGIN');
+ await admin.query('DELETE FROM alphatrace.workspaces WHERE owner_id=ANY($1::uuid[])',[[alice,bob,outsider]]);
+ await admin.query('ALTER TABLE alphatrace.research_drafts DISABLE TRIGGER check_research_review');
+ await admin.query('UPDATE alphatrace.research_drafts SET published_update_id=NULL WHERE created_by=$1',[operator]);
+ await admin.query('DELETE FROM alphatrace.research_updates WHERE published_by=$1',[operator]);
+ await admin.query('DELETE FROM alphatrace.research_drafts WHERE created_by=$1',[operator]);
+ await admin.query('ALTER TABLE alphatrace.research_drafts ENABLE TRIGGER check_research_review');
+ await admin.query('DELETE FROM alphatrace.research_checks WHERE recorded_by=$1',[operator]);
+ await admin.query('DELETE FROM alphatrace.research_operators WHERE user_id=$1',[operator]);
+ await admin.query('COMMIT');await admin.end();
+}

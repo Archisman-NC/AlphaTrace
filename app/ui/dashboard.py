@@ -22,6 +22,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Quant & Data Imports
 from app.data.market_data import fetch_ohlcv, NIFTY50_TICKERS
@@ -82,7 +83,7 @@ def get_validate_and_route():
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 
 # --- Page Config ---
 st.set_page_config(page_title="AlphaTrace AI Copilot", page_icon="📊", layout="wide")

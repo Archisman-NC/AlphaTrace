@@ -4,11 +4,12 @@ import logging
 import time
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 from app.utils.helpers import langfuse
 from app.reasoning.memory_engine import extract_relevant_memory
 
 # Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 
 logger = logging.getLogger(__name__)
 

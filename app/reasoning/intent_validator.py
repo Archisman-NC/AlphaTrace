@@ -4,9 +4,10 @@ import logging
 from app.utils.helpers import safe_float
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 logger = logging.getLogger(__name__)
 
 VALID_PORTFOLIOS = ["PORTFOLIO_001 (Rahul)", "PORTFOLIO_002 (Priya)", "PORTFOLIO_003 (Arun)"]

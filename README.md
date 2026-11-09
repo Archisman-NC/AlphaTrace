@@ -1,5 +1,7 @@
 # 📊 AlphaTrace: Quantitative Intelligence Research Workbench
 
+> **Next.js product:** the invited beta in [web/](web/README.md) includes Supabase authentication, private portfolios and investment theses, published TCS/Infosys/Wipro research, a personal review inbox, and journal exports. Trigger.dev runs scheduled IndianAPI monitoring and private document processing; source changes enter an operator review queue, and publication requires human approval. The planned universe is 25 Indian companies, with five currently configured for provider monitoring. The website is prepared for Vercel but is not yet publicly deployed. See the [deployment guide](web/docs/vercel.md), [product specification](docs/product_spec.md), [ten-step plan](docs/transformation_plan.md), and [coverage plan](docs/beta_operating_plan.md). The legacy Streamlit research workbench remains available below.
+
 AlphaTrace is a professional-grade quantitative intelligence platform designed for strategy research, market regime detection, and operational health monitoring. It transforms raw market data into structured, actionable research intelligence using a deterministic, interpretability-first architecture.
 
 ## 🚀 Architecture Overview
@@ -73,3 +75,5 @@ python3 run_research.py
 
 ---
 *AlphaTrace is a research infrastructure tool. Past performance is not indicative of future results.*
+
+Local configuration is consolidated in `web/.env.local`; copy `web/.env.example` for a fresh checkout. Both the Next.js app and legacy Python modules read that file. Provider, development, test and setup keys are named separately; cloud deployment exports only explicitly allowed runtime settings. Never upload the whole private file.

@@ -1,0 +1,26 @@
+import { validateResearch,comparisonResult,publicationGaps,ResearchInputError,type ResearchPayload,type Source,type EvidencePoint } from '../../src/lib/research-contract';
+
+// Dated, inspected originals. A different file requires a new reconciliation.
+export const wiproReviewOriginals=[
+ {key:'results',id:'official',title:'Wipro Q2 FY27 audited consolidated financial results',url:'https://www.sec.gov/Archives/edgar/data/1123799/000119312526426839/d118455dex991.htm',publishedOn:'2026-10-15',kind:'results',sha256:'7c8af978207ede66c415144b4db183120162c6124a161d501a2a8433b3094c90'},
+ {key:'june-release',id:'wipro_jun_release',title:'Wipro Q1 FY27 results release — June 2026',url:'https://www.wipro.com/newsroom/press-releases/2026/wipro-announces-results-for-the-quarter-ended-june-30-2026/',publishedOn:'2026-07-16',kind:'release',sha256:'fd6ae52a1e1efdb1559b939c7b39171f3ba9663f898906094ac4ff8f30228987'},
+ {key:'september-release',id:'wipro_sep_release',title:'Wipro Q2 FY27 results release — September 2026',url:'https://www.wipro.com/newsroom/press-releases/2026/wipro-announces-results-for-the-quarter-ended-september-30-2026/',publishedOn:'2026-10-15',kind:'release',sha256:'f131da9a3d58c57c043d5dde776f23761c016aba67be63f0fd7e0a5502463a1a'},
+] as const;
+export function completeWiproDraft(base:ResearchPayload,sources:Source[]):ResearchPayload{
+ if(base.symbol!=='WIPRO'||base.periodEnd!=='2026-09-30'||base.comparison!=='QoQ')throw new ResearchInputError('This evidence package is restricted to Wipro June/September 2026.');
+ if(sources.length!==3||wiproReviewOriginals.some(ref=>!sources.some(s=>s.id===ref.id&&s.url===ref.url&&s.sha256===ref.sha256&&s.publishedOn===ref.publishedOn&&s.kind===ref.kind&&s.mediaType==='text/html'&&s.fingerprintKind==='document_bytes')))throw new ResearchInputError('Reconcile all three exact official originals before preparing this package.');
+ const point=(value:string,index:number,sourceId:string,locator:string,margin=false):EvidencePoint=>({value,sourceId,locator,page:null,unit:margin?'%':'INR crore',basis:'consolidated',standard:margin?'IFRS':'Ind AS',treatment:'reported',periodType:'quarter',periodEnd:index===0?'2026-06-30':'2026-09-30',...(margin?{scope:'IT services segment'}:{})});
+ const p=validateResearch({...base,title:'Wipro: revenue, owner profit and IT-services margin — September 2026',sources,comparisons:[
+  {metric:'revenue',previous:point('24478.6',0,'official','Audited consolidated Ind AS statement; Revenue from operations; June three-month column; INR million / 10'),current:point('24752.7',1,'official','Audited consolidated Ind AS statement; Revenue from operations; September three-month column; INR million / 10'),note:'Group revenue from the Ind AS statement. Preserve the decimal amounts; the provider rounds these to whole crores.'},
+  {metric:'net_profit',previous:point('3352',0,'official','Audited consolidated Ind AS statement; Profit attributable to equity holders of the Company; June three-month column; INR million / 10'),current:point('3200.6',1,'official','Audited consolidated Ind AS statement; Profit attributable to equity holders of the Company; September three-month column; INR million / 10'),note:'Profit attributable to owners, excluding non-controlling interests. API total profit and the rounded IFRS press-release net income are different definitions; their percentage changes are not substituted.'},
+  {metric:'operating_margin',previous:point('16.0',0,'wipro_jun_release','Q1 FY27 release; Highlights item 5 and definition footnote 5; IT-services operating margin',true),current:point('16.5',1,'wipro_sep_release','Q2 FY27 release; Highlights item 5 and definition footnote 5; IT-services operating margin',true),note:'Reported IT-services segment margin under IFRS, not whole-company margin or the API derived operating-profit series. Change is 0.50 percentage points (50 basis points).'},
+ ],limitations:[
+  'Revenue and owner-attributable profit use consolidated Ind AS. Margin uses the IT-services segment definition in the IFRS releases. Each metric compares the same scope and standard across periods; no Ind AS-to-IFRS conversion is inferred.',
+  'Provider operating profit is a derived pre-depreciation amount and is excluded. Provider net profit includes non-controlling interests; the owner-profit comparison uses the exact official statement instead.',
+  'The June/September press releases report rounded IFRS net income of INR 33.6/32.0 billion and a 4.7% sequential decline. The Ind AS owner-profit comparison declines 4.52%; these are different measures, not interchangeable rounding corrections.',
+  'SEC HTML tracking code changed between downloads while the visible financial statement remained identical. This package uses fingerprinted original-file snapshots. File checks do not establish that the live website is unchanged.',
+  'Figures are reported, not adjusted recurring earnings. Segment disclosures include amortisation/impairment, share-based compensation and gains on asset sales; this comparison does not remove those items or infer investment outcomes.',
+ ],extractorVersion:'wipro-official-review-2026-11-08-v1'});
+ if(publicationGaps(p).length||p.comparisons.some(c=>!comparisonResult(c,p.comparison).available))throw new ResearchInputError('The completed package is not structurally comparable.');
+ return p;
+}

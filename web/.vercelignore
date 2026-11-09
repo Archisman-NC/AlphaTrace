@@ -1,0 +1,10 @@
+.env*
+!.env.example
+.local/
+.trigger/
+.vercel/
+.next/
+node_modules/
+coverage/
+*.tsbuildinfo
+*.log

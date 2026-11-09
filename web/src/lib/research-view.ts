@@ -1,0 +1,5 @@
+import type { ResearchPayload } from './research-contract';
+export type CompanyCoverage={symbol:string;name:string;sector:string;status:'planned'|'published'|'withdrawn';version:number|null;periodEnd:string|null;publishedAt:string|null;sourceChanged:boolean;lastSuccessfulCheck:string|null;check:{status:'success'|'failed';checked_at:string;message:string;fingerprints:string[]}|null};
+export type PublishedResearch={id:string;draft_id:string;symbol:string;version:number;payload:ResearchPayload;published_at:string;withdrawn_at:string|null;withdrawal_reason:string|null;supersedes:string|null};
+export type ResearchDraft={id:string;revised_by?:string|null;parent_id?:string|null;revision_reason?:string|null;changes?:string[];payload:ResearchPayload;state:'draft'|'approved'|'needs_correction'|'published';created_at:string;review_note:string|null;reviewed_at:string|null;published_update_id:string|null;superseded_by:string|null;superseded_version:number|null};
+export type ResearchView={catalog:CompanyCoverage[];history:PublishedResearch[];drafts:ResearchDraft[];isOperator:boolean};

@@ -4,6 +4,7 @@ import logging
 import time
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 from app.reasoning.memory_engine import extract_relevant_memory
 
 def get_langfuse():
@@ -11,7 +12,7 @@ def get_langfuse():
     return langfuse
 
 # Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 
 logger = logging.getLogger(__name__)
 

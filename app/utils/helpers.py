@@ -1,12 +1,13 @@
 import os
 import logging
 from dotenv import load_dotenv
+from pathlib import Path
 from langfuse import Langfuse
 from contextlib import contextmanager
 import time
 
 # Load environment variables early
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 logger = logging.getLogger(__name__)
 
 def safe_float(x):

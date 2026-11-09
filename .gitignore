@@ -16,3 +16,6 @@ __pycache__/
 .vscode/
 .idea/
 logs/
+
+# Local web/database development
+.local/
