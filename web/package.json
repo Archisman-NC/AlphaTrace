@@ -17,6 +17,7 @@
     "test:db": "node scripts/test-local.mjs tests/database.integration.ts",
     "test:portfolio": "node scripts/test-local.mjs tests/portfolio.integration.ts",
     "test:onboarding": "node scripts/test-local.mjs tests/onboarding.integration.ts",
+    "test:accounts": "node scripts/test-local.mjs tests/accounts.integration.ts",
     "test:issues": "node scripts/test-local.mjs tests/issues.integration.ts",
     "test:emails": "node scripts/test-local.mjs tests/emails.integration.ts",
     "test:thesis": "node scripts/test-local.mjs tests/thesis.integration.ts",

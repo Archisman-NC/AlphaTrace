@@ -18,6 +18,10 @@ Validate with `npm test`, `node scripts/test-local.mjs tests/onboarding.integrat
 
 Published comparisons and individual metrics now include “Report an issue”. `/issues` provides private report history and an operator queue with Open, In review and Resolved states. Resolutions can explain the evidence, link a newer published correction or confirm a withdrawal. Research publication remains a separate human-reviewed action. Apply migration 017 and run `npm run test:issues`; see [issue reporting](docs/issue-reporting.md).
 
+## Account & data controls
+
+`/settings` now includes password changes, a complete private-data JSON export, and explicitly confirmed account closure. Operator accounts require handover before deletion. Apply migration 018 before deploying the shared account gate, then deploy the account-cleanup worker and website. See [account controls](docs/account-controls.md); `npm run test:accounts` uses isolated synthetic users. Live recovery email verification remains pending.
+
 ## Local setup
 
 Personal update emails are implemented at `/settings`: explicit opt-in, optional deferred-review reminders, unsubscribe and delivery history. Resend delivery through Trigger.dev remains disabled until a verified sending domain and signed webhook are configured. Apply migration 016 before deploying; see [personal email setup](docs/personal-emails.md) and run `npm run test:emails` against isolated local storage.

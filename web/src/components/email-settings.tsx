@@ -1,6 +1,7 @@
 'use client';
 import { useEffect,useRef,useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import AccountControls from './account-controls';
 import WorkspaceHeader from './workspace-header';
 import { browserAuth } from '@/lib/browser-auth';
 import { localEmailSettings } from '@/app/settings/actions';
@@ -8,7 +9,7 @@ import type { EmailView,EmailSettingsResult,EmailDelivery } from '@/lib/email-co
 const date=(s:string)=>new Date(s).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'medium',timeStyle:'short'})+' IST';
 function status(d:EmailDelivery){return d.complainedAt?'Complaint received':d.bouncedAt?'Delivery stopped':d.deliveredAt?'Delivered':({pending:'Queued',sending:'Sending',retry:'Retry scheduled',accepted:'Accepted by Resend',failed:'Delivery failed',uncertain:'Unconfirmed',cancelled:'Cancelled'}[d.state]??d.state);}
 export default function EmailSettings({local,authConfig}:{local:boolean;authConfig:{url:string;key:string}|null}){
- const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(local||!authConfig),[error,setError]=useState('');
+ const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(local||!authConfig),[error,setError]=useState(''),[accountClosed,setAccountClosed]=useState(false);
  const url=authConfig?.url,key=authConfig?.key;
  useEffect(()=>{
   if(local||!url||!key)return;let active=true;
@@ -17,7 +18,7 @@ export default function EmailSettings({local,authConfig}:{local:boolean;authConf
    return()=>{active=false;subscription.unsubscribe();};
   }catch{setReady(true);setError('Browser session storage is unavailable.');}
  },[local,url,key]);
- return <div className="private-shell"><WorkspaceHeader active="settings" local={local}/><main id="workspace-content" className="private-content email-settings"><div className="page-heading"><div><span className="eyebrow">A QUIETER WAY TO KEEP UP</span><h1>Email preferences<span className="heading-dot">.</span></h1><p>Get the research that matters to you, without checking every day.</p></div></div>{error&&<p role="alert" className="account-alert error">{error}</p>}{!ready?<p role="status">Restoring your session…</p>:!local&&!session?<section className="panel reading"><h2>Your preferences are private.</h2><p>Sign in with your invited account to manage personal update emails.</p><a className="button-link primary" href="/workspace">Sign in →</a></section>:<Preferences key={local?'local':session!.user.id} local={local} token={session?.access_token} address={session?.user.email}/>}</main></div>;
+ return <div className="private-shell"><WorkspaceHeader active="settings" local={local}/><main id="workspace-content" className="private-content email-settings"><div className="page-heading"><div><span className="eyebrow">YOUR WORKSPACE PREFERENCES</span><h1>Settings<span className="heading-dot">.</span></h1><p>Manage your account, personal data and email preferences.</p></div></div>{error&&<p role="alert" className="account-alert error">{error}</p>}{!ready?<p role="status">Restoring your session…</p>:!local&&!session?<section className="panel reading"><h2>Your preferences are private.</h2><p>Sign in with your invited account to manage your account, data and email preferences.</p><a className="button-link primary" href="/workspace">Sign in →</a></section>:<div key={local?'local':session!.user.id}><AccountControls local={local} token={session?.access_token} email={session?.user.email} authConfig={authConfig} onClosed={setAccountClosed}/>{!accountClosed&&<><div id="email-preferences" className="settings-section-heading"><h2>Email preferences</h2></div><Preferences local={local} token={session?.access_token} address={session?.user.email}/></>}</div>}</main></div>;
 }
 function Preferences({local,token,address}:{local:boolean;token?:string;address?:string}){
  const [data,setData]=useState<EmailView|null>(null),[enabled,setEnabled]=useState(false),[reminders,setReminders]=useState(true),[consent,setConsent]=useState(false);

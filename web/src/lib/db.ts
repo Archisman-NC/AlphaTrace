@@ -11,7 +11,7 @@ function pool() {
   globalDb.alphaPool = created;
   return created;
 }
-export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>Promise<T>, options:{readOnlySnapshot?:boolean}={}):Promise<T> {
+export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>Promise<T>, options:{readOnlySnapshot?:boolean;accountControl?:boolean}={}):Promise<T> {
   if (!UUID.test(ownerId)) throw new Error('Invalid identity');
   const client=await pool().connect();
   try {
@@ -21,9 +21,12 @@ export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>P
       throw new Error('Runtime database role must be alphatrace_app without RLS bypass.');
     await client.query(options.readOnlySnapshot?'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY':'BEGIN');
     await client.query("SELECT set_config('app.user_id',$1,true)",[ownerId]);
+    await client.query(options.accountControl?'SELECT pg_advisory_xact_lock(hashtext($1))':'SELECT pg_advisory_xact_lock_shared(hashtext($1))',['account:'+ownerId.toLowerCase()]);
+    if(!options.accountControl&&(await client.query('SELECT 1 FROM alphatrace.account_closures WHERE owner_id=$1',[ownerId])).rowCount)throw new AccountClosedError('This account is closed.');
     const result=await operation(client);
     await client.query('COMMIT'); return result;
   } catch(error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }
+export class AccountClosedError extends Error {}
 export async function closeDatabase() { await globalDb.alphaPool?.end(); globalDb.alphaPool=undefined; }

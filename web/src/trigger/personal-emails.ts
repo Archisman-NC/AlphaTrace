@@ -1,5 +1,5 @@
 import { schedules } from '@trigger.dev/sdk';
-import { closeDatabase } from '../lib/db';
+import { closeDatabase,AccountClosedError } from '../lib/db';
 import { emailConfig,emailsAvailable } from '../lib/email-contract';
 import { getEmailSettings,prepareEmailDigest,pendingEmailDigests,deliverEmailDigest } from '../lib/emails';
 import { verifiedEmailRecipient } from '../lib/email-recipient';
@@ -26,7 +26,7 @@ export const personalUpdateEmails=schedules.task({
       const id=await prepareEmailDigest(owner,recipient,config);
       if(id){const verified=await verifiedEmailRecipient(owner);const state=await deliverEmailDigest(owner,id,verified,(payload,key)=>sendResend(payload,config.apiKey,key));if(state==='accepted')accepted++;if(state==='failed'||state==='retry')failed++;}
      }
-    }catch{failed++;}
+    }catch(e){if(!(e instanceof AccountClosedError))failed++;}
    }
    // Never log recipients, unsubscribe capabilities, payloads or credentials.
    if(failed)throw Error(`Email pass needs attention: ${accepted} accepted; ${failed} failed or pending retry. Check delivery records.`);

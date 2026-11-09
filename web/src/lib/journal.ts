@@ -1,4 +1,5 @@
 import { asUser } from './db';
+import type { PoolClient } from 'pg';
 import { JournalLimitError,type Journal } from './journal-format';
 
 // Static SQL projections intentionally omit auth identities, internal commands,
@@ -22,7 +23,9 @@ const queries={
   ORDER BY c.symbol,c.checked_at DESC`,
 };
 export async function exportJournal(owner:string):Promise<Journal>{
- return asUser(owner,async c=>{
+ return asUser(owner,c=>exportJournalWithClient(c,owner),{readOnlySnapshot:true});
+}
+export async function exportJournalWithClient(c:PoolClient,owner:string):Promise<Journal>{
   await c.query("SET LOCAL statement_timeout='15s'");
   const exportedAt=(await c.query('SELECT transaction_timestamp() AS time')).rows[0].time.toISOString();
   const data:Record<string,unknown>={};let bytes=0;
@@ -35,5 +38,4 @@ export async function exportJournal(owner:string):Promise<Journal>{
    data[name]=name==='workspace'?(rows[0]??null):rows;
   }
   return JSON.parse(JSON.stringify({schemaVersion:1,exportedAt,scope:'Your saved private portfolio, thesis revisions, review history and the published evidence they reference.',complete:true,...data}));
- },{readOnlySnapshot:true});
 }

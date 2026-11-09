@@ -34,7 +34,10 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
   try{client=browserAuth(authUrl,authKey);}
   catch{setAuthReady(true);setError('Browser session storage is unavailable. Enable it and reload to sign in.');return;}
   auth.current=client;
-  if(new URLSearchParams(window.location.search).get('recovery')==='1')setRecovery(true);
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('recovery')==='1')setRecovery(true);
+  if(params.get('passwordChanged')==='1')setMessage('Sign in again with your new password.');
+  if(params.get('accountClosed')==='1')setMessage('Your account closure was recorded. This browser session has been cleared.');
   let active=true;
   const {data:{subscription}}=client.auth.onAuthStateChange((event,next)=>{
    if(!active)return;
