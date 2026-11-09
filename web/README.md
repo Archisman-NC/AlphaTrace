@@ -14,6 +14,10 @@ Apply migration `015_guided_onboarding.sql` before deploying this feature. It ad
 
 Validate with `npm test`, `node scripts/test-local.mjs tests/onboarding.integration.ts`, `npm run test:portfolio`, and `npm run build`. Browser checks use synthetic data in isolated local storage; no real account's preferences are prefilled.
 
+## Issue reporting
+
+Published comparisons and individual metrics now include “Report an issue”. `/issues` provides private report history and an operator queue with Open, In review and Resolved states. Resolutions can explain the evidence, link a newer published correction or confirm a withdrawal. Research publication remains a separate human-reviewed action. Apply migration 017 and run `npm run test:issues`; see [issue reporting](docs/issue-reporting.md).
+
 ## Local setup
 
 Personal update emails are implemented at `/settings`: explicit opt-in, optional deferred-review reminders, unsubscribe and delivery history. Resend delivery through Trigger.dev remains disabled until a verified sending domain and signed webhook are configured. Apply migration 016 before deploying; see [personal email setup](docs/personal-emails.md) and run `npm run test:emails` against isolated local storage.
