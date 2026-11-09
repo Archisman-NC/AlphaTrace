@@ -41,7 +41,7 @@ Emails include a visible unsubscribe link and RFC 8058 headers. GET only display
 
 The webhook verifies original request bytes with Svix before parsing JSON. A narrow function updates known provider IDs; raw bodies and addresses are not logged. Early callbacks for uncommitted IDs receive 503 for retry. Event IDs deduplicate callbacks, and late delivery events cannot clear a bounce or complaint.
 
-Settings require invited-account authentication. User tables have forced owner RLS. Webhook event storage has no direct application-role access. The worker uses the server-owned pilot allowlist and does not log recipients.
+Settings require invited-account authentication. User tables have forced owner RLS. Webhook event storage has no direct application-role access. The worker uses active database-managed beta members after bootstrap (the server-owned allowlist before bootstrap) and does not log recipients.
 
 Run `npm test`, `npm run test:emails`, and `npm run build`. Tests cover explicit consent, escaping, configuration gates, signatures, isolation, concurrent sends, historical cutoff, quiet days, retries, unsubscribe, reminders, withdrawals, recipient changes and suppression. Integration tests use isolated local PostgreSQL and a fake sender.
 

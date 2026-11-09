@@ -5,6 +5,7 @@ import './onboarding.css';
 import './email.css';
 import './issues.css';
 import './account.css';
+import './people.css';
 import './reliability.css';
 import ConnectionNotice from '@/components/connection-notice';
 export const metadata:Metadata={title:'AlphaTrace · Research workspace',description:'An evidence-backed investment research workspace.',robots:{index:false,follow:false}};

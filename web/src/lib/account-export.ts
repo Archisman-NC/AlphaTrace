@@ -10,7 +10,7 @@ const queries={
  issuePublications:`SELECT id,symbol,version,payload,published_at,withdrawn_at,withdrawal_reason FROM alphatrace.research_updates WHERE id IN (SELECT publication_id FROM alphatrace.research_issues WHERE owner_id=$1 UNION SELECT correction_id FROM alphatrace.research_issues WHERE owner_id=$1 UNION SELECT e.correction_id FROM alphatrace.research_issue_events e JOIN alphatrace.research_issues i ON i.id=e.issue_id WHERE i.owner_id=$1) ORDER BY symbol,version`,
 };
 export async function exportAccount(owner:string){return asUser(owner,async c=>{
- const journal=await exportJournalWithClient(c,owner),data:Record<string,unknown>={};let bytes=Buffer.byteLength(JSON.stringify(journal));
+ const journal=await exportJournalWithClient(c,owner),data:Record<string,unknown>={betaAccess:(await c.query('SELECT alphatrace.beta_self() AS membership')).rows[0].membership};let bytes=Buffer.byteLength(JSON.stringify(journal));
  for(const [name,sql] of Object.entries(queries)){
   const stats=(await c.query(`SELECT count(*)::int AS count,coalesce(sum(octet_length(row_to_json(t)::text)),0)::text AS bytes FROM (${sql} LIMIT 5001) t`,[owner])).rows[0];bytes+=Number(stats.bytes);
   if(stats.count>5000||bytes>10*1024*1024)throw new JournalLimitError('Your data exceeds the download limit. No partial export was created. Contact the beta operator for a full export.');

@@ -24,10 +24,15 @@ export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>P
     await client.query("SELECT set_config('app.user_id',$1,true)",[ownerId]);
     await client.query(options.accountControl?'SELECT pg_advisory_xact_lock(hashtext($1))':'SELECT pg_advisory_xact_lock_shared(hashtext($1))',['account:'+ownerId.toLowerCase()]);
     if(!options.accountControl&&(await client.query('SELECT 1 FROM alphatrace.account_closures WHERE owner_id=$1',[ownerId])).rowCount)throw new AccountClosedError('This account is closed.');
+    if(!options.accountControl){
+      const status=(await client.query('SELECT alphatrace.beta_access_status() AS status')).rows[0].status;
+      if(!['legacy','active'].includes(status))throw new AccessRevokedError('Beta access is not active.');
+    }
     const result=await operation(client);
     await client.query('COMMIT'); return result;
   } catch(error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }
+export class AccessRevokedError extends Error {}
 export class AccountClosedError extends Error {}
 export async function closeDatabase() { await globalDb.alphaPool?.end(); globalDb.alphaPool=undefined; }

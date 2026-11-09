@@ -108,6 +108,6 @@ const capabilityIdentity='00000000-0000-4000-8000-000000000000';
 export async function unsubscribeEmail(token:unknown){
  if(typeof token!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(token))throw new PortfolioInputError('This unsubscribe link is invalid. Open email preferences after signing in instead.');
  const hash=createHash('sha256').update(token).digest('hex');
- await asUser(capabilityIdentity,c=>c.query('SELECT alphatrace.unsubscribe_email($1)',[hash]));
+ await asUser(capabilityIdentity,c=>c.query('SELECT alphatrace.unsubscribe_email($1)',[hash]),{accountControl:true});
 }
-export async function recordEmailEvent(id:string,providerId:string,type:string,at:string){return asUser(capabilityIdentity,async c=>(await c.query('SELECT alphatrace.record_email_event($1,$2,$3,$4) AS recorded',[id,providerId,type,at])).rows[0].recorded as boolean);}
+export async function recordEmailEvent(id:string,providerId:string,type:string,at:string){return asUser(capabilityIdentity,async c=>(await c.query('SELECT alphatrace.record_email_event($1,$2,$3,$4) AS recorded',[id,providerId,type,at])).rows[0].recorded as boolean,{accountControl:true});}

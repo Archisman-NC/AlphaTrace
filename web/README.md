@@ -1,6 +1,10 @@
 # AlphaTrace web app
 
-The Next.js App Router app includes invited-account authentication, private portfolios and theses, reviewed shared research, a personal review inbox and journal exports. `/` redirects to the real-account workspace at `/workspace`; the browser-local illustrative sample is available at `/demo`; `/workspace?view=companies` manages holdings, watchlists and CSV imports. Human-reviewed TCS, Infosys and Wipro research is available to invited users. Recovery and a second real Auth account still need testing. No automatic invitations or broker integration is active. The legacy Python app also reads the consolidated local environment.
+The Next.js App Router app includes invited-account authentication, private portfolios and theses, reviewed shared research, a personal review inbox and journal exports. `/` redirects to the real-account workspace at `/workspace`; the browser-local illustrative sample is available at `/demo`; `/workspace?view=companies` manages holdings, watchlists and CSV imports. Human-reviewed TCS, Infosys and Wipro research is available to invited users. Password recovery, email receipt and a second non-operator pilot account have been verified. Operators can create manually shared beta invitations; automatic invitation emails and broker integration are not active. The legacy Python app also reads the consolidated local environment.
+
+## Beta access management
+
+`/people` lets operators create, replace and revoke three-day invitation links, with a five-seat limit and private setup milestones. `/join` activates new accounts or accepts invitations for existing logins, then opens guided onboarding. No sending domain is needed. Apply migrations 020–021, deploy, and run `npm run beta:bootstrap` once to preserve existing pilot access. Thereafter membership is database managed. See [beta access](docs/beta-access.md); validate with `npm run test:beta`.
 
 ## Guided onboarding
 
@@ -20,7 +24,7 @@ Published comparisons and individual metrics now include “Report an issue”. 
 
 ## Account & data controls
 
-`/settings` now includes password changes, a complete private-data JSON export, and explicitly confirmed account closure. Operator accounts require handover before deletion. Apply migration 018 before deploying the shared account gate, then deploy the account-cleanup worker and website. See [account controls](docs/account-controls.md); `npm run test:accounts` uses isolated synthetic users. Live recovery email verification remains pending.
+`/settings` now includes password changes, a complete private-data JSON export, and explicitly confirmed account closure. Operator accounts require handover before deletion. Apply migration 018 before deploying the shared account gate, then deploy the account-cleanup worker and website. See [account controls](docs/account-controls.md); `npm run test:accounts` uses isolated synthetic users. Live recovery and inbox delivery were verified; see [pilot verification](docs/pilot-verification.md).
 
 ## Reliability and service health
 

@@ -47,3 +47,7 @@ To keep using the local Python path before the worker is verified, leave `ALPHAT
 - Live synthetic upload/worker test `run_06gruuf9p2uhslj28b9q42p8a2` passed: signed upload, public-read denial, exact hash, unapproved result and active cleanup schedule. Test data was removed. This verifies the HTML attachment path; a real TCS workbook import on the final website remains a release check.
 - 92 unit tests, 17 Python tests, document-job and evidence-edit integration tests, TypeScript and the production Next.js build passed. A browser test with mocked cloud responses verified direct upload, progress, refresh/resume and mobile layout.
 - Local cloud document mode enabled. The website is deployed at https://alpha-trace-beryl.vercel.app/. Public-page, health and signed-out API checks passed; the pilot confirmed live sign-in and saved-data loading after refresh. Password recovery and a real TCS workbook import on the final origin still need verification.
+
+## Database-managed beta invitations
+
+Apply migrations 020–021 before deploying the beta access feature. Deploy the website and workers, then run `npm run beta:bootstrap` with the existing verified pilot IDs. This replaces everyday allowlist edits with `/people`. Keep the current bootstrap environment values; no new cloud secrets are needed. See [beta access](beta-access.md) for rollout and rollback constraints.

@@ -43,7 +43,9 @@
     "db:migrate:local": "node scripts/test-local.mjs scripts/migrate.mjs",
     "test:documents": "node scripts/test-local.mjs tests/document-jobs.integration.ts",
     "vercel:check": "node --env-file-if-exists=.env.local --import tsx scripts/vercel-check.ts",
-    "storage:setup": "node --env-file=.env.local --import tsx scripts/setup-document-storage.ts"
+    "storage:setup": "node --env-file=.env.local --import tsx scripts/setup-document-storage.ts",
+    "test:beta": "node scripts/test-local.mjs tests/beta.integration.ts",
+    "beta:bootstrap": "node --env-file=.env.local --import tsx scripts/bootstrap-beta-access.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",
