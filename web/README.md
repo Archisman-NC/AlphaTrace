@@ -1,6 +1,6 @@
 # AlphaTrace web app
 
-The Next.js App Router app includes invited-account authentication, private portfolios and theses, reviewed shared research, a personal review inbox and journal exports. `/workspace` now opens the real-account overview; `/workspace?view=companies` manages holdings, watchlists and CSV imports. Human-reviewed TCS, Infosys and Wipro research is available to invited users. Recovery and a second real Auth account still need testing. No automatic invitations or broker integration is active. The legacy Python app also reads the consolidated local environment.
+The Next.js App Router app includes invited-account authentication, private portfolios and theses, reviewed shared research, a personal review inbox and journal exports. `/` redirects to the real-account workspace at `/workspace`; the browser-local illustrative sample is available at `/demo`; `/workspace?view=companies` manages holdings, watchlists and CSV imports. Human-reviewed TCS, Infosys and Wipro research is available to invited users. Recovery and a second real Auth account still need testing. No automatic invitations or broker integration is active. The legacy Python app also reads the consolidated local environment.
 
 ## Local setup
 
