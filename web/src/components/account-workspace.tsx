@@ -8,6 +8,7 @@ import WorkspaceHeader from './workspace-header';
 import WorkspaceOverview from './workspace-overview';
 import GuidedOnboarding from './guided-onboarding';
 import { browserAuth } from '@/lib/browser-auth';
+import {recoveryCallback,recoveryPassword,recoveryRequestError} from '@/lib/password-recovery';
 import { universe } from '@/lib/companies';
 import { previewHoldings,readHoldingsCsv,validQuantity,type CsvTable,type Portfolio,type PortfolioCommand,type ImportRow } from '@/lib/portfolio-input';
 import { localPortfolio } from '@/app/workspace/actions';
@@ -19,6 +20,9 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
  const [session,setSession]=useState<Session|null>(null);
  const [authReady,setAuthReady]=useState(local||!authConfig);
  const [recovery,setRecovery]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState('');
+ const [recoveryChecked,setRecoveryChecked]=useState(false);
+ const [confirmPassword,setConfirmPassword]=useState(''),[invalidRecovery,setInvalidRecovery]=useState(false),[passwordUpdated,setPasswordUpdated]=useState(false),[passwordUncertain,setPasswordUncertain]=useState(false);
+ const authLock=useRef(false);
  const [portfolio,setPortfolio]=useState<Portfolio|null>(null),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false);
  const [error,setError]=useState(''),[message,setMessage]=useState(''),[conflict,setConflict]=useState(false),[reloadKey,setReloadKey]=useState(0);
  const [view,setView]=useState<'holdings'|'watchlist'|'import'>('holdings');
@@ -32,9 +36,12 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
  const authUrl=authConfig?.url,authKey=authConfig?.key;
  useEffect(()=>{
   if(!authUrl||!authKey||local)return;
+  const callback=recoveryCallback(window.location.search,window.location.hash);
+  if(callback.requested)setRecovery(true);
+  if(callback.invalid){setInvalidRecovery(true);window.history.replaceState(null,'','/workspace?recovery=invalid');}
   let client:SupabaseClient;
   try{client=browserAuth(authUrl,authKey);}
-  catch{setAuthReady(true);setError('Browser session storage is unavailable. Enable it and reload to sign in.');return;}
+  catch{setAuthReady(true);setRecoveryChecked(true);setInvalidRecovery(true);setError('Browser session storage is unavailable. Enable it and reload to sign in.');return;}
   auth.current=client;
   const params=new URLSearchParams(window.location.search);
   if(params.get('recovery')==='1')setRecovery(true);
@@ -44,13 +51,22 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
   const {data:{subscription}}=client.auth.onAuthStateChange((event,next)=>{
    if(!active)return;
    setSession(next);setAuthReady(true);
-   if(event==='PASSWORD_RECOVERY')setRecovery(true);
-   if(event==='SIGNED_OUT'){requestGeneration.current++;setPortfolio(null);setPassword('');setMessage('Signed out.');}
+   if(event==='PASSWORD_RECOVERY'&&!callback.invalid){setRecovery(true);setInvalidRecovery(false);}
+   if(event==='SIGNED_OUT'){requestGeneration.current++;setPortfolio(null);setPassword('');setConfirmPassword('');if(!authLock.current)setMessage('Signed out.');}
   });
-  client.auth.getSession().then(({data,error})=>{if(!active)return;setSession(data.session);setAuthReady(true);if(error)setError('Your session could not be restored. Please sign in again.');}).catch(()=>{if(active){setAuthReady(true);setError('Your session could not be restored. Please reload.');}});
+  void (async()=>{
+   try{
+    const initialized=await client.auth.initialize();
+    const {data,error}=await client.auth.getSession();
+    if(!active)return;
+    if(callback.requested&&(initialized.error||error)){setInvalidRecovery(true);window.history.replaceState(null,'','/workspace?recovery=invalid');}
+    setSession(data.session);setRecoveryChecked(true);setAuthReady(true);
+    if(error&&!callback.requested)setError('Your session could not be restored. Please sign in again.');
+   }catch{if(active){setInvalidRecovery(true);setRecoveryChecked(true);setAuthReady(true);setError('Your session could not be restored. Please reload.');}}
+  })();
   return()=>{active=false;subscription.unsubscribe();auth.current=null;};
  },[authUrl,authKey,local]);
- useEffect(()=>{setPortfolio(null);setCsv(null);setQuantity('');setQuantityError('');setRemoveSymbol(null);setConflict(false);setMessage('');},[session?.user.id]);
+ useEffect(()=>{setPortfolio(null);setCsv(null);setQuantity('');setQuantityError('');setRemoveSymbol(null);setConflict(false);},[session?.user.id]);
  useEffect(()=>{
   if(!authReady||(!local&&!session)||recovery)return;
   const generation=++requestGeneration.current;
@@ -107,22 +123,45 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
   finally{setBusy(false);}
  }
  async function recover(){
-  if(!auth.current||!email.trim())return;
-  setBusy(true);setError('');setMessage('');
+  if(!auth.current||authLock.current)return;
+  const emailInput=document.getElementById('email') as HTMLInputElement|null;
+  if(!emailInput?.reportValidity())return;
+  authLock.current=true;setBusy(true);setError('');setMessage('');
   try{
    const {error}=await auth.current.auth.resetPasswordForEmail(email.trim(),{redirectTo:window.location.origin+'/workspace?recovery=1'});
-   if(error)throw Error('Recovery could not be requested. Please try again later.');
-   setMessage('If that address has an account, you’ll receive a recovery email.');
-  }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+   if(error){setError(recoveryRequestError(error));return;}
+   setMessage('If that address has an account, you’ll receive a recovery email. Check your inbox and spam folder. Use the newest link; if no email arrives, contact the beta operator.');
+  }catch(e){setError(recoveryRequestError(e));}finally{authLock.current=false;setBusy(false);}
+ }
+ async function returnToSignIn(){
+  if(authLock.current)return;
+  authLock.current=true;setBusy(true);setError('');
+  try{
+   if(session&&auth.current){const {error}=await auth.current.auth.signOut({scope:'local'});if(error)throw error;}
+   setSession(null);setRecovery(false);setInvalidRecovery(false);setPassword('');setConfirmPassword('');
+   setPasswordUncertain(false);setPasswordUpdated(false);
+   window.history.replaceState(null,'','/workspace');
+   setMessage(passwordUpdated?'Password updated. Sign in with your new password.':'');
+  }catch{setError('This session could not be signed out. Please check your connection and retry.');}
+  finally{authLock.current=false;setBusy(false);}
  }
  async function updatePassword(event:FormEvent){
-  event.preventDefault();if(!auth.current||!session)return;
-  setBusy(true);setError('');
+  event.preventDefault();if(!auth.current||!session||!recoveryChecked||invalidRecovery||passwordUpdated||passwordUncertain||authLock.current)return;
+  try{recoveryPassword(password,confirmPassword);}catch(e){setError((e as Error).message);return;}
+  authLock.current=true;setBusy(true);setError('');setMessage('');
   try{
    const {error}=await auth.current.auth.updateUser({password});
-   if(error)throw Error('Password could not be updated. The recovery link may have expired, or your password may not meet the configured requirements.');
-   setPassword('');setRecovery(false);window.history.replaceState(null,'','/workspace');setMessage('Password updated.');
-  }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+   if(error){
+    if(!error.status||error.status>=500){setPasswordUncertain(true);setError('The password change could not be confirmed. Return to sign-in and try your new password before requesting another reset.');}
+    else setError(error.status===429?'Too many attempts. Wait before trying again.':'Password could not be updated. The link may have expired, or the password may not meet the account requirements. Request a new link if needed.');
+    return;
+   }
+   setPasswordUpdated(true);setMessage('Password updated.');
+   const {error:signOutError}=await auth.current.auth.signOut({scope:'global'});
+   if(signOutError){setError('Your password changed, but signing out other sessions could not be confirmed. Return to sign-in to clear this session.');return;}
+   window.location.assign('/workspace?passwordChanged=1');
+  }catch{setPasswordUncertain(true);setError('The result could not be confirmed. Return to sign-in and try your new password before requesting another reset.');}
+  finally{setPassword('');setConfirmPassword('');authLock.current=false;setBusy(false);}
  }
  async function signOut(){
   if(!auth.current)return;
@@ -158,7 +197,7 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
    {(authPanel||companiesView)&&<div className="page-heading"><div><div className="eyebrow">YOUR COMPANIES. YOUR CONTEXT.</div><h1>{authPanel?'A home for your research.':'My companies'}</h1><p>{local?'Your holdings and watchlist, saved in your local workspace.':session?'Your holdings and watchlist are tied to your invited account.':'Sign in with the email address used for your beta invitation.'}</p></div>{!authPanel&&portfolio&&<button disabled={busy||loading} onClick={()=>setReloadKey(k=>k+1)}>{loading?'Loading…':'Reload companies'}</button>}</div>}
    {error&&<div className="account-alert error" role="alert">{error}{conflict&&<button disabled={busy||loading} onClick={()=>setReloadKey(k=>k+1)}>Reload latest data</button>}</div>}
    {message&&<div className="account-alert success" role="status">{message}</div>}
-   {!authReady?<div className="panel empty" role="status">Restoring your session…</div>:authPanel?<div className="auth-layout"><section className="panel reading auth-card"><span className="badge lavender">Invite-only access</span><h2>{recovery?'Choose a new password':'Welcome back'}</h2>{!authConfig?<><p>Account sign-in is not configured on this installation yet. The sample demo is available without an account.</p><a className="button-link primary" href="/demo">Explore the sample workspace ↗</a></>:recovery?<>{session?<form onSubmit={updatePassword}><label htmlFor="new-password">New password</label><input id="new-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={password} onChange={e=>setPassword(e.target.value)}/><p className="fine-print">Use at least 12 characters. Your project’s password rules also apply.</p><button className="primary wide" disabled={busy}>Update password</button></form>:<p>The recovery link is missing or expired. Request a new email from the sign-in screen.</p>}<button className="text-button" disabled={busy} onClick={()=>{setRecovery(false);window.history.replaceState(null,'','/workspace');}}>Return to sign-in</button></>:<form onSubmit={signIn}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={e=>setPassword(e.target.value)}/><button className="primary wide" disabled={busy}>{busy?'Please wait…':'Sign in →'}</button><button type="button" className="text-button" disabled={busy||!email.trim()} onClick={recover}>Forgot your password?</button></form>}</section><section className="auth-context"><span className="eyebrow">A SMALL, DELIBERATE BETA</span><h2>Start with what you own.<br/>Keep the reasoning close.</h2><p>Import holdings, choose the companies you want to follow, and build a private record of your research.</p><div className="coverage-line"><span>Initial research universe</span><strong>25 companies</strong></div><div className="coverage-line"><span>Watchlist capacity</span><strong>20 companies</strong></div><div className="coverage-line"><span>Research publication</span><span className="badge">Reviewed before publication</span></div></section></div>:<>
+   {!authReady?<div className="panel empty" role="status">Restoring your session…</div>:authPanel?<div className="auth-layout"><section className="panel reading auth-card"><span className="badge lavender">Invite-only access</span><h2>{recovery?(passwordUpdated?'Password updated':passwordUncertain?'Check your new password':'Choose a new password'):'Welcome back'}</h2>{!authConfig?<><p>Account sign-in is not configured on this installation yet. The sample demo is available without an account.</p><a className="button-link primary" href="/demo">Explore the sample workspace ↗</a></>:recovery?<>{!recoveryChecked?<p role="status">Checking your recovery link…</p>:passwordUpdated?<p>Your password has been updated. Sign in again with the new password.</p>:passwordUncertain?<p>The request was interrupted. Check whether your new password works before repeating it.</p>:session&&!invalidRecovery?<form onSubmit={updatePassword}><label htmlFor="new-password">New password</label><input id="new-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required disabled={busy} value={password} onChange={e=>setPassword(e.target.value)}/><label htmlFor="confirm-new-password">Confirm new password</label><input id="confirm-new-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required disabled={busy} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/><p className="fine-print">Use 12–128 characters. You’ll sign in again after updating. Other sessions may remain valid until their access tokens expire.</p><button className="primary wide" disabled={busy}>{busy?'Updating…':'Update password'}</button></form>:<p>The recovery link is missing, expired or already used. Return to sign-in, enter your email and request a new link. Open the newest email.</p>}<button className="text-button" disabled={busy} onClick={()=>void returnToSignIn()}>Return to sign-in</button></>:<form onSubmit={signIn}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={e=>setPassword(e.target.value)}/><button className="primary wide" disabled={busy}>{busy?'Please wait…':'Sign in →'}</button><button type="button" className="text-button" disabled={busy||!email.trim()} onClick={recover}>Forgot your password?</button></form>}</section><section className="auth-context"><span className="eyebrow">A SMALL, DELIBERATE BETA</span><h2>Start with what you own.<br/>Keep the reasoning close.</h2><p>Import holdings, choose the companies you want to follow, and build a private record of your research.</p><div className="coverage-line"><span>Initial research universe</span><strong>25 companies</strong></div><div className="coverage-line"><span>Watchlist capacity</span><strong>20 companies</strong></div><div className="coverage-line"><span>Research publication</span><span className="badge">Reviewed before publication</span></div></section></div>:<>
     {local&&<div className="local-mode-note">Local development identity · No account sign-in is being simulated. Production disables this access.</div>}
     {!portfolio&&!error?<div className="panel empty" role="status"><h2>Loading your portfolio…</h2><p>Reading your saved companies from the database.</p></div>:!portfolio?<div className="panel empty"><h2>Your workspace couldn’t be loaded</h2><p>{local?'Your local storage is unavailable. Try again once connected.':'Access requires an invited, verified account and a configured database.'}</p><button onClick={()=>setReloadKey(k=>k+1)}>Try again</button></div>:!companiesView?<GuidedOnboarding key={local?'local':session?.user.id} local={local} token={session?.access_token} portfolio={portfolio} catalog={coverage} requested={setupRequested} onPortfolio={setPortfolio}><WorkspaceOverview key={local?'local':session!.user.id} portfolio={portfolio} catalog={coverage} coverageError={coverageError} local={local} token={session?.access_token} onRefreshCoverage={()=>setReloadKey(k=>k+1)}/></GuidedOnboarding>:<>
      <div className="stats private-stats"><div><span>Holdings recorded</span><strong>{holdings.length}</strong><p>Quantities you entered or imported</p></div><div><span>Companies followed</span><strong>{following.length}<small>/ 20</small></strong><p>Independent of your holdings</p></div><div><span>Research coverage</span><strong>{coverage?coverage.filter(c=>c.status==='published').length:'—'}<small>/ 25 published</small></strong><p><a href="/research">{coverage?'Open source-backed research →':'Check research availability →'}</a></p></div></div>
