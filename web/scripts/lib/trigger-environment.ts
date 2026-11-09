@@ -3,10 +3,19 @@ import { readLocalEnvironment } from './local-environment.mjs';
 import { UUID } from '../../src/lib/access';
 
 export function runtimeEnvironment(runtime:Record<string,string>) {
- const url=new URL(runtime.DATABASE_URL);
- if(!/^alphatrace_app(?:\.[a-z]{20})?$/.test(url.username)||url.search||runtime.DATABASE_SSL!=='true'||!UUID.test(runtime.ALPHATRACE_INGEST_USER_ID??''))throw Error('Invalid runtime configuration.');
- const ca=runtime.DATABASE_SSL_CA_PEM||(runtime.DATABASE_SSL_CA_FILE?readFileSync(runtime.DATABASE_SSL_CA_FILE,'utf8'):'');
- if(!ca.includes('-----BEGIN CERTIFICATE-----'))throw Error('A trusted database certificate is required.');
+ const connection=runtime.DATABASE_URL;
+ if(!connection?.trim())throw Error('DATABASE_URL is missing. Add it to this deployment environment.');
+ if(connection!==connection.trim()||/^["']|["']$/.test(connection))throw Error('DATABASE_URL contains surrounding quotes or whitespace. Paste only the connection URL value.');
+ let url:URL;
+ try{url=new URL(connection);}catch{throw Error('DATABASE_URL is not a valid PostgreSQL URL. Paste its value, without DATABASE_URL= or surrounding quotes.');}
+ if(!['postgres:','postgresql:'].includes(url.protocol)||!url.hostname)throw Error('DATABASE_URL must be a PostgreSQL connection URL.');
+ if(!/^alphatrace_app(?:\.[a-z]{20})?$/.test(url.username))throw Error('DATABASE_URL must use the restricted alphatrace_app role.');
+ if(url.search)throw Error('DATABASE_URL must not contain query parameters; configure TLS through DATABASE_SSL and DATABASE_SSL_CA_PEM.');
+ if(runtime.DATABASE_SSL!=='true')throw Error('DATABASE_SSL must be true for the hosted database.');
+ if(!UUID.test(runtime.ALPHATRACE_INGEST_USER_ID??''))throw Error('ALPHATRACE_INGEST_USER_ID must be the enrolled operator UUID.');
+ let ca=runtime.DATABASE_SSL_CA_PEM||'';
+ if(!ca&&runtime.DATABASE_SSL_CA_FILE){try{ca=readFileSync(runtime.DATABASE_SSL_CA_FILE,'utf8');}catch{throw Error('DATABASE_SSL_CA_FILE cannot be read. On Vercel, configure DATABASE_SSL_CA_PEM instead of a local file path.');}}
+ if(!ca.includes('-----BEGIN CERTIFICATE-----'))throw Error('DATABASE_SSL_CA_PEM must contain the trusted database certificate.');
  return {DATABASE_URL:runtime.DATABASE_URL,DATABASE_SSL:'true',DATABASE_SSL_CA_PEM:ca,ALPHATRACE_INGEST_USER_ID:runtime.ALPHATRACE_INGEST_USER_ID};
 }
 /** Explicit cloud allowlist. Setup/admin credentials, test settings and Trigger keys stay local. */
