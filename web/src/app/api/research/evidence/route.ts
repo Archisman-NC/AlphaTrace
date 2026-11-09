@@ -1,3 +1,4 @@
+import {serviceBoundary} from '@/lib/service-errors';
 import { requestIdentity } from '@/lib/auth';
 import { localAccessAllowed,UUID } from '@/lib/access';
 import { boundedJson } from '@/lib/http-input';
@@ -9,7 +10,7 @@ import { ResearchInputError } from '@/lib/research-contract';
 import {documentJobsEnabled} from '@/lib/document-job-contract';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-export async function POST(request:Request){
+async function POSTHandler(request:Request){
  let owner=await requestIdentity(request);
  if(!owner&&localAccessAllowed(process.env,request.headers.get('host'))){try{const id=process.env.ALPHATRACE_DEV_USER_ID;if(id&&UUID.test(id)&&new URL(request.headers.get('origin')??'').host===request.headers.get('host'))owner=id;}catch{}}
  if(!owner)return json({error:'Sign in with an invited operator account.'},401);
@@ -29,3 +30,5 @@ export async function POST(request:Request){
   throw new ResearchInputError('Unknown evidence action.');
  }catch(e){const result=researchError(e);return json(result,result.status);}
 }
+
+export const POST=serviceBoundary(POSTHandler);

@@ -22,6 +22,10 @@ Published comparisons and individual metrics now include “Report an issue”. 
 
 `/settings` now includes password changes, a complete private-data JSON export, and explicitly confirmed account closure. Operator accounts require handover before deletion. Apply migration 018 before deploying the shared account gate, then deploy the account-cleanup worker and website. See [account controls](docs/account-controls.md); `npm run test:accounts` uses isolated synthetic users. Live recovery email verification remains pending.
 
+## Reliability and service health
+
+Recoverable page/root errors, a missing-page view and connection/session notices are implemented. Operators can use **Service health** at `/monitoring` to inspect database availability, recorded worker/job failures, review backlog and coverage without consuming provider requests. Authentication service outages return 503 rather than a misleading expired-session response. Apply migration 019 before deployment; see [reliability](docs/reliability.md) and run `npm run test:reliability`.
+
 ## Local setup
 
 Personal update emails are implemented at `/settings`: explicit opt-in, optional deferred-review reminders, unsubscribe and delivery history. Resend delivery through Trigger.dev remains disabled until a verified sending domain and signed webhook are configured. Apply migration 016 before deploying; see [personal email setup](docs/personal-emails.md) and run `npm run test:emails` against isolated local storage.

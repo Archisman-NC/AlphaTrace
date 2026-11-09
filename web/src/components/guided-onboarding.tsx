@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useRef,useState,type ReactNode } from 'react';
 import { localOnboarding } from '@/app/workspace/onboarding-actions';
 import { onboardingTopics,rankFirstReviews,type OnboardingResult,type OnboardingView,type OnboardingTopic,type OnboardingCommand } from '@/lib/onboarding-contract';
@@ -13,7 +15,7 @@ export default function GuidedOnboarding(props:Props){
  useEffect(()=>{
   let active=true;setError('');
   async function load(){try{
-   const result:OnboardingResult=local?await localOnboarding():await fetch('/api/onboarding',{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
+   const result:OnboardingResult=local?await localOnboarding():await apiFetch('/api/onboarding',{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
    if(!result.onboarding)throw Error(result.error||'Setup could not be loaded.');
    if(active)setData(result.onboarding);
   }catch(e){if(active)setError(e instanceof Error?e.message:'Setup could not be loaded.');}}
@@ -41,7 +43,7 @@ function SetupWizard({local,token,portfolio,catalog,initial,onPortfolio,onClose,
   try{
    let result:OnboardingResult;
    if(local)result=await localOnboarding(command);
-   else {const response=await fetch('/api/onboarding',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(25_000)});result={...await response.json(),status:response.status};}
+   else {const response=await apiFetch('/api/onboarding',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(25_000)});result={...await response.json(),status:response.status};}
    if(!mounted.current)return false;
    if(!result.onboarding||!result.portfolio){rejected=!!result.status&&result.status<500&&result.status!==409;throw Error(result.error||'The save could not be confirmed. Reload setup.');}
    setData(result.onboarding);onSaved(result.onboarding);onPortfolio(result.portfolio);return true;

@@ -1,4 +1,5 @@
 'use client';
+import {apiFetch} from './api-fetch';
 import type {DocumentCommand,DocumentJobView} from './document-job-contract';
 type Pending={id:string;kind:DocumentCommand['kind'];signature:string;commandId:string};
 type Progress=(message:string)=>void;
@@ -6,7 +7,7 @@ const key=(scope:string)=>'alphatrace-document:'+scope;
 export function pendingDocument(scope:string):Pending|null{try{return JSON.parse(sessionStorage.getItem(key(scope))??'null');}catch{return null;}}
 export function forgetDocument(scope:string){sessionStorage.removeItem(key(scope));}
 async function call(body:object,token?:string){
- const response=await fetch('/api/document-jobs',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(60_000)});
+ const response=await apiFetch('/api/document-jobs',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(60_000)});
  const value=await response.json();if(!response.ok||value.error)throw Error(value.error??'Document service is unavailable.');return value;
 }
 async function waitForDocument(scope:string,pending:Pending,token:string|undefined,progress:Progress){

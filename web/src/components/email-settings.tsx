@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useRef,useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import AccountControls from './account-controls';
@@ -26,7 +28,7 @@ function Preferences({local,token,address}:{local:boolean;token?:string;address?
  const generation=useRef(0),lock=useRef(false);
  async function request(input?:unknown):Promise<EmailSettingsResult>{
   if(local)return localEmailSettings(input);
-  const r=await fetch('/api/email/preferences',{method:input?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(input?{'Content-Type':'application/json'}:{})},...(input?{body:JSON.stringify(input)}:{}),cache:'no-store',signal:AbortSignal.timeout(20000)});return {...await r.json(),status:r.status};
+  const r=await apiFetch('/api/email/preferences',{method:input?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(input?{'Content-Type':'application/json'}:{})},...(input?{body:JSON.stringify(input)}:{}),cache:'no-store',signal:AbortSignal.timeout(20000)});return {...await r.json(),status:r.status};
  }
  useEffect(()=>{const run=++generation.current;setLoading(true);setError('');void request().then(result=>{if(run!==generation.current)return;if(!result.email)throw Error(result.error||'Email settings could not be loaded.');setData(result.email);setEnabled(result.email.preferences.enabled);setReminders(result.email.preferences.reminders);setConsent(false);setUncertain(false);}).catch(e=>{if(run===generation.current)setError(e instanceof Error?e.message:'Could not load settings.');}).finally(()=>{if(run===generation.current)setLoading(false);});return()=>{generation.current++;};},[token,local,reload]);
  async function save(){

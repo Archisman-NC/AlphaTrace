@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { localInbox } from '@/app/inbox/actions';
 import type { InboxList,InboxItem } from '@/lib/inbox-contract';
@@ -23,7 +25,7 @@ export default function WorkspaceOverview({portfolio,catalog,local,token,coverag
   const current=()=>run===generation.current;
   async function request(filter?:string) {
    if(local)return filter?localInbox({filter}):localInbox({},{action:'sync'});
-   const response=await fetch('/api/inbox'+(filter?'?filter='+filter:''),{method:filter?'GET':'POST',cache:'no-store',signal:AbortSignal.timeout(20_000),headers:{Authorization:`Bearer ${tokenRef.current}`,...(!filter?{'Content-Type':'application/json'}:{})},...(!filter?{body:JSON.stringify({action:'sync'})}:{})});
+   const response=await apiFetch('/api/inbox'+(filter?'?filter='+filter:''),{method:filter?'GET':'POST',cache:'no-store',signal:AbortSignal.timeout(20_000),headers:{Authorization:`Bearer ${tokenRef.current}`,...(!filter?{'Content-Type':'application/json'}:{})},...(!filter?{body:JSON.stringify({action:'sync'})}:{})});
    return response.json();
   }
   try {

@@ -1,16 +1,17 @@
+import {serviceBoundary} from '@/lib/service-errors';
 import { requestIdentity } from '@/lib/auth';
 import { getWorkspace,saveWorkspace } from '@/lib/workspaces';
 import { workspaceName } from '@/lib/access';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export async function GET(request:Request) {
+async function GETHandler(request:Request) {
   const id=await requestIdentity(request);
   if (!id) return json({error:'Authentication required'},401);
   try { return json({workspace:await getWorkspace(id)}); }
   catch { return json({error:'Workspace storage unavailable'},503); }
 }
-export async function POST(request:Request) {
+async function POSTHandler(request:Request) {
   const id=await requestIdentity(request);
   if (!id) return json({error:'Authentication required'},401);
   if (!request.headers.get('content-type')?.startsWith('application/json')) return json({error:'JSON required'},415);
@@ -29,3 +30,6 @@ export async function POST(request:Request) {
   try { return json({workspace:await saveWorkspace(id,name)}); }
   catch { return json({error:'Workspace storage unavailable'},503); }
 }
+
+export const GET=serviceBoundary(GETHandler);
+export const POST=serviceBoundary(POSTHandler);

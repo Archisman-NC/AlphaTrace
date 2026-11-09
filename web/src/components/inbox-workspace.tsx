@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useCallback,useEffect,useRef,useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import WorkspaceHeader from './workspace-header';
@@ -49,7 +51,7 @@ function InboxSession({local,token,initialUpdate,initialFilter}:{local:boolean;t
  const request=useCallback<Request>(async(query={},command)=>{
   if(local)return localInbox(query,command);
   const params=new URLSearchParams();for(const [key,value] of Object.entries(query))if(value!==undefined)params.set(key,String(value));
-  const response=await fetch('/api/inbox?'+params.toString(),{method:command?'POST':'GET',cache:'no-store',...(!command||(command as {action?:string}).action==='sync'?{signal:AbortSignal.timeout(20_000)}:{}),headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})});
+  const response=await apiFetch('/api/inbox?'+params.toString(),{method:command?'POST':'GET',cache:'no-store',...(!command||(command as {action?:string}).action==='sync'?{signal:AbortSignal.timeout(20_000)}:{}),headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})});
   return {...await response.json(),status:response.status};
  },[local]);
  async function load(nextFilter:InboxFilter=filter,sync=false,cursor?:string){

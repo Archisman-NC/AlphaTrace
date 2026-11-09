@@ -1,3 +1,4 @@
+import {serviceBoundary} from '@/lib/service-errors';
 import {tasks} from '@trigger.dev/sdk';
 import {requestIdentity} from '@/lib/auth';
 import {localAccessAllowed,UUID} from '@/lib/access';
@@ -14,7 +15,7 @@ async function identity(request:Request){
  if(localAccessAllowed(process.env,request.headers.get('host'))){const id=process.env.ALPHATRACE_DEV_USER_ID;try{if(id&&UUID.test(id)&&new URL(request.headers.get('origin')??'').host===request.headers.get('host'))return id;}catch{}}
  return null;
 }
-export async function POST(request:Request){
+async function POSTHandler(request:Request){
  const owner=await identity(request);if(!owner)return json({error:'Sign in with an invited operator account.'},401);
  try{
   await requireResearchEditor(owner);
@@ -41,3 +42,5 @@ export async function POST(request:Request){
   throw new ResearchInputError('Unknown document operation.');
  }catch(e){const r=researchError(e);return json(r,r.status);}
 }
+
+export const POST=serviceBoundary(POSTHandler);

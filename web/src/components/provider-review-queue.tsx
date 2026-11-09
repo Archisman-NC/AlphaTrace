@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { localImportReviews } from '@/app/imports/actions';
 import { importReviewTitle,type ImportReview,type ImportReviewStatus,type ImportReviewView } from '@/lib/provider-review-contract';
@@ -20,7 +22,7 @@ export default function ProviderReviewQueue({local,token,onInspect}:{local:boole
   const generation=++seq.current;working.current=true;setBusy(true);
   try{
    const query={status,before,id:focusId};const params=new URLSearchParams({status,...(before?{before}:{}),...(focusId?{id:focusId}:{})});
-   const reply:Reply=local?await localImportReviews(query):await fetch('/api/imports/reviews?'+params,{cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`},signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
+   const reply:Reply=local?await localImportReviews(query):await apiFetch('/api/imports/reviews?'+params,{cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`},signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
    if(generation!==seq.current)return;
    if(reply.error||!reply.reviews)throw Error(reply.error??'Review queue unavailable.');
    if(focusId&&!reply.reviews.items.length)throw Error('This review item was not found.');
@@ -40,7 +42,7 @@ export default function ProviderReviewQueue({local,token,onInspect}:{local:boole
   saving.current=true;setBusy(true);setError('');
   try{
    const command={action:'prepare',id:selected.id};
-   const reply=local?await localImportReviews({},command):await fetch('/api/imports/reviews',{method:'POST',headers:{Authorization:`Bearer ${tokenRef.current}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
+   const reply=local?await localImportReviews({},command):await apiFetch('/api/imports/reviews',{method:'POST',headers:{Authorization:`Bearer ${tokenRef.current}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
    if(reply.error)throw Error(reply.error);
    window.location.assign(`/research?admin=1&symbol=${selected.symbol}&importReview=${selected.id}`);
   }catch(e){setError(e instanceof Error?e.message:'Could not prepare evidence review.');}
@@ -51,7 +53,7 @@ export default function ProviderReviewQueue({local,token,onInspect}:{local:boole
   saving.current=true;setBusy(true);setError('');setMessage('');
   try{
    const command={id:selected.id,version:selected.version,action:selected.status==='pending'?'review':'reopen',note};
-   const reply:Reply=local?await localImportReviews({},command):await fetch('/api/imports/reviews',{method:'POST',headers:{Authorization:`Bearer ${tokenRef.current}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
+   const reply:Reply=local?await localImportReviews({},command):await apiFetch('/api/imports/reviews',{method:'POST',headers:{Authorization:`Bearer ${tokenRef.current}`,'Content-Type':'application/json'},body:JSON.stringify(command),signal:AbortSignal.timeout(20_000)}).then(r=>r.json());
    if(reply.error)throw Error(reply.error);
    setMessage(reply.message??'Review saved.');setSelected(null);setNote('');loadedLink.current=undefined;
    saving.current=false;await load();

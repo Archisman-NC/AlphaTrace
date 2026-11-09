@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { workerOnline,workerLabel } from '@/lib/worker-status';
 import { localImports } from '@/app/imports/actions';
@@ -14,7 +16,7 @@ export default function ProviderImports({local,token}:{local:boolean;token?:stri
  const request=useCallback(async(command?:object)=>{
   const run=++seq.current;working.current=true;setBusy(true);setError('');if(command)setMessage('');
   try{
-   const result:Reply=local?await localImports(command):await fetch('/api/imports',{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})}).then(r=>r.json());
+   const result:Reply=local?await localImports(command):await apiFetch('/api/imports',{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})}).then(r=>r.json());
    if(run!==seq.current)return;
    if(result.error||!result.imports)throw Error(result.error??'Import status is unavailable.');
    setData(result.imports);if(result.message)setMessage(result.message);

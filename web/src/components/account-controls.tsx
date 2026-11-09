@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import {useEffect,useRef,useState} from 'react';
 import {browserAuth} from '@/lib/browser-auth';
 import {passwordInput,type AccountState} from '@/lib/account-contract';
@@ -7,7 +9,7 @@ export default function AccountControls({local,token,email,authConfig,onClosed}:
  const [current,setCurrent]=useState(''),[password,setPassword]=useState(''),[confirmPassword,setConfirmPassword]=useState(''),[deletionPassword,setDeletionPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[acknowledged,setAcknowledged]=useState(false);
  const lock=useRef(false),alive=useRef(true);
  const auth=()=>authConfig?browserAuth(authConfig.url,authConfig.key):null;
- async function request(path:string,method='GET',body?:unknown){const r=await fetch(path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},cache:'no-store',signal:AbortSignal.timeout(25000),...(body?{body:JSON.stringify(body)}:{})});const result=await r.json();if(r.status===401&&alive.current)setExpired(true);if(!r.ok)throw Error(result.error||'The request could not be completed.');return result;}
+ async function request(path:string,method='GET',body?:unknown){const r=await apiFetch(path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},cache:'no-store',signal:AbortSignal.timeout(25000),...(body?{body:JSON.stringify(body)}:{})});const result=await r.json();if(r.status===401&&alive.current)setExpired(true);if(!r.ok)throw Error(result.error||'The request could not be completed.');return result;}
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
  useEffect(()=>{if(local)return;let active=true;void request('/api/account').then(r=>{if(active){setState(r.account);setClosed(r.account.closed);}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[local,token]);
  async function run(work:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setError('');setMessage('');try{await work();}catch(e){if(alive.current)setError(e instanceof Error?e.message:'The request could not be completed.');}finally{lock.current=false;if(alive.current)setBusy(false);}}
@@ -17,7 +19,7 @@ export default function AccountControls({local,token,email,authConfig,onClosed}:
   await auth()?.auth.signOut({scope:'local'});window.location.assign('/workspace?passwordChanged=1');
  });}
  async function download(){await run(async()=>{
-  const r=await fetch('/api/account/export',{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(30000)});
+  const r=await apiFetch('/api/account/export',{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(30000)});
   if(r.status===401)setExpired(true);if(!r.ok){const body=await r.json();throw Error(body.error||'Export could not be completed.');}
   const blob=await r.blob();if(!alive.current)return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=r.headers.get('Content-Disposition')?.match(/filename="([a-z0-9.-]+)"/)?.[1]??'alphatrace-account.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);setMessage('Your account data is ready. Check your browser downloads.');
  });}

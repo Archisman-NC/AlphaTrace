@@ -1,3 +1,4 @@
+import {serviceBoundary} from '@/lib/service-errors';
 import { requestIdentity } from '@/lib/auth';
 import { getPortfolio,updatePortfolio } from '@/lib/portfolios';
 import { PortfolioConflictError,PortfolioInputError } from '@/lib/portfolio-input';
@@ -5,13 +6,13 @@ import { boundedJson,RequestBodyError } from '@/lib/http-input';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
-export async function GET(request:Request){
+async function GETHandler(request:Request){
  const id=await requestIdentity(request);
  if(!id)return json({error:'Sign in with an invited account to continue.'},401);
  try{return json({portfolio:await getPortfolio(id)});}
  catch{return json({error:'Portfolio storage is unavailable. Please retry.'},503);}
 }
-export async function POST(request:Request){
+async function POSTHandler(request:Request){
  const id=await requestIdentity(request);
  if(!id)return json({error:'Sign in with an invited account to continue.'},401);
  try{return json({portfolio:await updatePortfolio(id,await boundedJson(request))});}
@@ -22,3 +23,6 @@ export async function POST(request:Request){
   return json({error:'Could not confirm the save. Reload your portfolio before retrying.'},503);
  }
 }
+
+export const GET=serviceBoundary(GETHandler);
+export const POST=serviceBoundary(POSTHandler);

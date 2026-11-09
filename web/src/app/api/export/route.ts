@@ -1,10 +1,11 @@
+import {serviceBoundary} from '@/lib/service-errors';
 import { requestIdentity } from '@/lib/auth';
 import { exportJournal } from '@/lib/journal';
 import { journalFile,journalFormat,JournalLimitError } from '@/lib/journal-format';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 const headers={'Cache-Control':'private, no-store','Vary':'Authorization','X-Content-Type-Options':'nosniff'};
-export async function GET(request:Request){
+async function GETHandler(request:Request){
  const owner=await requestIdentity(request);
  if(!owner)return Response.json({error:'Sign in with an invited account.'},{status:401,headers});
  let format;try{format=journalFormat(new URL(request.url).searchParams.get('format'));}catch{return Response.json({error:'Choose JSON or Markdown.'},{status:400,headers});}
@@ -16,3 +17,5 @@ export async function GET(request:Request){
   return new Response(stream,{headers:{...headers,'Content-Type':file.mediaType,'Content-Disposition':`attachment; filename="${file.filename}"`}});
  }catch(e){return Response.json({error:e instanceof JournalLimitError?e.message:'Your journal could not be exported. Please try again.'},{status:e instanceof JournalLimitError?413:503,headers});}
 }
+
+export const GET=serviceBoundary(GETHandler);

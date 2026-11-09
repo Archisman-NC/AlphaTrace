@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useState,type FormEvent } from 'react';
 import {cloudDocumentRequest,resumeDocument,pendingDocument,forgetDocument} from '@/lib/document-job-client';
 import { tcsImportFiles,manualFileLimit } from '@/lib/manual-tcs-contract';
@@ -22,7 +24,7 @@ export default function ManualTcsImport({token,onImported}:{token?:string;onImpo
    const input=Object.fromEntries([...data.entries()].filter((entry):entry is [string,string]=>typeof entry[1]==='string'));
    const cloud=await cloudDocumentRequest(scope,'tcs',input,tcsImportFiles.map(spec=>({field:spec.key,file:data.get(spec.key) as File})),token,setProgress);
    if(cloud){setResult(cloud.import as {created:boolean;state:string;publicationId:string|null});onImported();return;}
-   const response=await fetch('/api/monitor/manual-tcs',{method:'POST',headers:token?{Authorization:`Bearer ${token}`}:{},body:data});
+   const response=await apiFetch('/api/monitor/manual-tcs',{method:'POST',headers:token?{Authorization:`Bearer ${token}`}:{},body:data});
    const body=await response.json();if(!response.ok||!body.import)throw Error(body.error??'The import could not be confirmed. Retry the same files; identical evidence will not create another draft.');
    setResult(body.import);onImported();
   }catch(e){setError(e instanceof TypeError?'Connection lost. Retry the same files to confirm the result; identical evidence will not create another draft.':(e as Error).message);}

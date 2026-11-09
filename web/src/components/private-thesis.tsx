@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useRef,useState,type Dispatch,type SetStateAction } from 'react';
 import { localThesis } from '@/app/research/thesis-actions';
 import { emptyThesis,type ThesisPayload,type ThesisView,type Assumption } from '@/lib/thesis-input';
@@ -11,7 +13,7 @@ export default function PrivateThesis({symbol,local,token,publication,onDirty}:{
  const tokenRef=useRef(token),pending=useRef<unknown>(null),alive=useRef(true);tokenRef.current=token;
  async function request(command?:unknown,before?:number){
   if(local)return localThesis(symbol,command,before);
-  const response=await fetch(`/api/thesis?symbol=${encodeURIComponent(symbol)}${before?`&before=${before}`:''}`,{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})});
+  const response=await apiFetch(`/api/thesis?symbol=${encodeURIComponent(symbol)}${before?`&before=${before}`:''}`,{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})});
   return {...await response.json(),status:response.status};
  }
  function accept(next:ThesisView){setView(next);setDraft(next.current?.payload??emptyThesis());setReason('');setConfirmed(false);setDirty(false);setConflict(false);setUncertain(false);pending.current=null;}

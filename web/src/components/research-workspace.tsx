@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useRef,useState } from 'react';
 import IssueReportButton from './issue-report-button';
 import ResearchEditor from './research-editor';
@@ -68,11 +70,11 @@ export default function ResearchWorkspace({local,authConfig,initialSymbol,initia
   const current=++generation.current;setData(null);setError('');setLoading(true);
   if(!ready||(!local&&!session)){setLoading(false);return;}
   async function load(){try{
-   const result=local?await localResearch(symbol,admin,undefined,requestedUpdate):await fetch(`/api/research?symbol=${encodeURIComponent(symbol)}${admin?'&admin=1':''}${requestedUpdate?'&update='+encodeURIComponent(requestedUpdate):''}`,{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
+   const result=local?await localResearch(symbol,admin,undefined,requestedUpdate):await apiFetch(`/api/research?symbol=${encodeURIComponent(symbol)}${admin?'&admin=1':''}${requestedUpdate?'&update='+encodeURIComponent(requestedUpdate):''}`,{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
    if(current!==generation.current)return;
    if(result.error)throw Error(result.error);
    if(importReview&&result.isOperator){
-    const context=local?await localImportReviews({id:importReview}):await fetch(`/api/imports/reviews?id=${importReview}`,{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
+    const context=local?await localImportReviews({id:importReview}):await apiFetch(`/api/imports/reviews?id=${importReview}`,{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
     if(current!==generation.current)return;
     const item=context.reviews?.items[0];
     if(context.error||!item||item.symbol!==symbol)throw Error(context.error??'The linked import observation is unavailable for this company.');
@@ -90,7 +92,7 @@ export default function ResearchWorkspace({local,authConfig,initialSymbol,initia
  async function act(command:unknown){
   if(busy)return;const current=generation.current;setBusy(true);setError('');setMessage('');
   try{
-   const result=local?await localResearch(undefined,false,command):await fetch('/api/research',{method:'POST',headers:{Authorization:`Bearer ${session!.access_token}`,'Content-Type':'application/json'},body:JSON.stringify(command)}).then(r=>r.json());
+   const result=local?await localResearch(undefined,false,command):await apiFetch('/api/research',{method:'POST',headers:{Authorization:`Bearer ${session!.access_token}`,'Content-Type':'application/json'},body:JSON.stringify(command)}).then(r=>r.json());
    if(current!==generation.current)return;
    if(result.error)throw Error(result.error);
    if((command as {action?:string}).action==='publish'){

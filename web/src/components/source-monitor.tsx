@@ -1,8 +1,11 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { localMonitor } from '@/app/monitoring/actions';
 import { workerOnline,workerLabel } from '@/lib/worker-status';
 import ManualTcsImport from './manual-tcs-import';
+import SystemHealth from './system-health';
 import ProviderImports from './provider-imports';
 import { monitorCadence,monitorHeartbeatMs,monitorState,monitorGuidance,retryPending,type MonitorView,type MonitorSymbol } from '@/lib/monitor-contract';
 
@@ -14,7 +17,7 @@ export default function SourceMonitor({local,token,compact=false}:{local:boolean
  const request=useCallback(async(command?:{symbol:MonitorSymbol;action:string})=>{
   const run=++sequence.current;if(!command)setMessage('');if(command){working.current=true;setBusy(true);}setError('');
   try {
-   const result=local?await localMonitor(command):await fetch('/api/monitor',{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})}).then(r=>r.json());
+   const result=local?await localMonitor(command):await apiFetch('/api/monitor',{method:command?'POST':'GET',cache:'no-store',headers:{Authorization:`Bearer ${tokenRef.current}`,...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(command)}:{})}).then(r=>r.json());
    if(run!==sequence.current)return;
    if(result.error||!result.monitor)throw Error(result.error??'Monitoring status is unavailable.');
    setData(result.monitor);setLoadedAt(Date.now());
@@ -35,6 +38,7 @@ export default function SourceMonitor({local,token,compact=false}:{local:boolean
  const failed=data?.targets.filter(t=>t.latest?.state==='failed').length??0;
  if(compact)return <section className="panel monitor-compact" aria-label="Source monitoring"><div className="panel-heading"><h2>Official evidence checks</h2><a href="/monitoring">Details ↗</a></div><div className="monitor-compact-body">{error?<p role="alert">Status unavailable. <a href="/monitoring">Check monitoring →</a></p>:!data?<p role="status">Loading monitor status…</p>:<><span className={`badge ${!online&&enabled?'amber':'neutral'}`}>{!enabled?'Not enabled':label}</span><p>{enabled} of 25 companies scheduled · {failed?`${failed} latest check${failed===1?'':'s'} failed`:'Infosys discovery · TCS pinned sources'}</p><small>{monitorCadence}</small></>}</div></section>;
  return <>
+  <SystemHealth local={local} token={token}/>
   {data?.isOperator&&<ProviderImports local={local} token={token}/>}
   <details className="official-monitor-details" open={data?.isOperator?undefined:true}><summary>Supporting official-source checks and history</summary>
   <div className="overview-heading"><div><span className="eyebrow">KNOW WHAT WAS CHECKED</span><h1>Official-source checks<span className="heading-dot">.</span></h1><p>Supporting evidence checks are separate from IndianAPI change monitoring.</p></div><button disabled={busy||loading} onClick={()=>void request()}>Refresh status ↻</button></div>

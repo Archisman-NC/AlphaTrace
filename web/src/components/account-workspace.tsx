@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useEffect,useRef,useState,type FormEvent } from 'react';
 import { type Session,type SupabaseClient } from '@supabase/supabase-js';
 import JournalExport from './journal-export';
@@ -58,7 +60,7 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
     let result;
     if(local)result=await localPortfolio();
     else{
-     const response=await fetch('/api/portfolio',{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'});
+     const response=await apiFetch('/api/portfolio',{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'});
      result=await response.json();
     }
     if(generation!==requestGeneration.current)return;
@@ -73,7 +75,7 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
   setCoverage(null);setCoverageError('');if(!authReady||(!local&&!session)||recovery)return;
   let active=true;
   async function loadCoverage(){try{
-   const result=local?await localResearch():await fetch('/api/research',{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
+   const result=local?await localResearch():await apiFetch('/api/research',{headers:{Authorization:`Bearer ${session!.access_token}`},cache:'no-store'}).then(r=>r.json());
    if(!Array.isArray(result.catalog))throw Error('Research coverage is unavailable.');
    if(active)setCoverage(result.catalog);
   }catch{if(active)setCoverageError('Research coverage could not be loaded.');}}
@@ -88,7 +90,7 @@ export default function AccountWorkspace({local,authConfig,companiesView=false,s
    if(local){result=await localPortfolio(input);status=result.status??200;}
    else{
     if(!session)throw Error('Sign in again to save.');
-    const response=await fetch('/api/portfolio',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},body:JSON.stringify(input)});
+    const response=await apiFetch('/api/portfolio',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},body:JSON.stringify(input)});
     status=response.status;result=await response.json();
    }
    if(generation!==requestGeneration.current)return false;

@@ -1,4 +1,6 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import {cloudDocumentRequest,resumeDocument,pendingDocument,forgetDocument} from '@/lib/document-job-client';
 import { universe } from '@/lib/companies';
 import { useEffect,useState } from 'react';
@@ -21,7 +23,7 @@ export default function ResearchEditor({id,payload,token,check,onDirty,onSaved,o
  useEffect(()=>{if(!dirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
  const readiness=draftReadiness(edit,check);
  async function request(body:object|FormData){
-  const response=await fetch('/api/research/evidence',{method:'POST',headers:{...(token?{Authorization:`Bearer ${token}`} :{}),...(body instanceof FormData?{}:{'Content-Type':'application/json'})},body:body instanceof FormData?body:JSON.stringify(body)});
+  const response=await apiFetch('/api/research/evidence',{method:'POST',headers:{...(token?{Authorization:`Bearer ${token}`} :{}),...(body instanceof FormData?{}:{'Content-Type':'application/json'})},body:body instanceof FormData?body:JSON.stringify(body)});
   const result=await response.json();if(!response.ok||result.error)throw Error(result.error??'Could not save evidence.');return result;
  }
  async function save(){setBusy(true);setError('');try{const valid=validateResearch(edit);const result=await request({action:'revise',id,payload:valid,reason});onDirty(false);onSaved(result.id);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}

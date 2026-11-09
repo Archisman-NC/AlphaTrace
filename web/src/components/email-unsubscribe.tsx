@@ -1,8 +1,10 @@
 'use client';
+import {apiFetch} from '@/lib/api-fetch';
+
 import { useState } from 'react';
 export default function EmailUnsubscribe({token}:{token:string|null}){
  const [busy,setBusy]=useState(false),[done,setDone]=useState(false),[error,setError]=useState('');
  return <main className="email-unsubscribe"><a className="private-brand" href="/workspace"><span className="brand-mark">αT</span>AlphaTrace</a><section className="panel reading"><span className="eyebrow">YOU CONTROL YOUR EMAILS</span><h1>{done?'Personal emails are switched off.':token?'Stop personal update emails?':'This link is incomplete.'}</h1><p>{done?'You can enable them again in email settings. Your companies, research and saved responses are unchanged.':token?'This turns off research digests and review reminders. You can still use your workspace normally.':'Open the unsubscribe link in your email, or sign in to change your email preferences.'}</p>{token&&!done&&<button className="primary" disabled={busy} onClick={async()=>{
-  setBusy(true);setError('');try{const r=await fetch('/api/email/unsubscribe?token='+encodeURIComponent(token),{method:'POST',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('Could not confirm unsubscribe. Please retry.');setDone(true);window.history.replaceState(null,'','/email/unsubscribe');}catch{setError('Could not confirm unsubscribe. Please retry.');}finally{setBusy(false);}
+  setBusy(true);setError('');try{const r=await apiFetch('/api/email/unsubscribe?token='+encodeURIComponent(token),{method:'POST',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('Could not confirm unsubscribe. Please retry.');setDone(true);window.history.replaceState(null,'','/email/unsubscribe');}catch{setError('Could not confirm unsubscribe. Please retry.');}finally{setBusy(false);}
  }}>{busy?'Updating…':'Unsubscribe from personal emails'}</button>}{error&&<p className="error" role="alert">{error}</p>}<p className="fine-print">A message already being sent may still arrive.</p><a className="text-button" href="/settings">Open email settings →</a></section></main>;
 }

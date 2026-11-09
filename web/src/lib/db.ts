@@ -11,7 +11,7 @@ function pool() {
   globalDb.alphaPool = created;
   return created;
 }
-export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>Promise<T>, options:{readOnlySnapshot?:boolean;accountControl?:boolean}={}):Promise<T> {
+export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>Promise<T>, options:{readOnlySnapshot?:boolean;accountControl?:boolean;statementTimeoutMs?:number}={}):Promise<T> {
   if (!UUID.test(ownerId)) throw new Error('Invalid identity');
   const client=await pool().connect();
   try {
@@ -20,6 +20,7 @@ export async function asUser<T>(ownerId:string, operation:(client:PoolClient)=>P
     if (role.rows[0]?.name !== 'alphatrace_app' || role.rows[0]?.rolsuper || role.rows[0]?.rolbypassrls)
       throw new Error('Runtime database role must be alphatrace_app without RLS bypass.');
     await client.query(options.readOnlySnapshot?'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY':'BEGIN');
+    if(options.statementTimeoutMs)await client.query("SELECT set_config('statement_timeout',$1,true)",[String(Math.min(15000,Math.max(1000,options.statementTimeoutMs)))]);
     await client.query("SELECT set_config('app.user_id',$1,true)",[ownerId]);
     await client.query(options.accountControl?'SELECT pg_advisory_xact_lock(hashtext($1))':'SELECT pg_advisory_xact_lock_shared(hashtext($1))',['account:'+ownerId.toLowerCase()]);
     if(!options.accountControl&&(await client.query('SELECT 1 FROM alphatrace.account_closures WHERE owner_id=$1',[ownerId])).rowCount)throw new AccountClosedError('This account is closed.');
