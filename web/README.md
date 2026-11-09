@@ -16,6 +16,8 @@ Validate with `npm test`, `node scripts/test-local.mjs tests/onboarding.integrat
 
 ## Local setup
 
+Personal update emails are implemented at `/settings`: explicit opt-in, optional deferred-review reminders, unsubscribe and delivery history. Resend delivery through Trigger.dev remains disabled until a verified sending domain and signed webhook are configured. Apply migration 016 before deploying; see [personal email setup](docs/personal-emails.md) and run `npm run test:emails` against isolated local storage.
+
 Requirements: Node 22 (see `.nvmrc`), npm, Docker Compose or PostgreSQL 18.3. The project pins dependencies and commits its npm lockfile. A project-local Node 22 binary is also included as a development dependency to support machines whose global Node is older; npm scripts use it automatically after installation.
 
 From `web/`:

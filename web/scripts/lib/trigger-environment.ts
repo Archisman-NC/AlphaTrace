@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { readLocalEnvironment } from './local-environment.mjs';
 import { UUID } from '../../src/lib/access';
+import { emailEnvironment } from './email-environment';
 
 export function runtimeEnvironment(runtime:Record<string,string>) {
  const connection=runtime.DATABASE_URL;
@@ -28,6 +29,6 @@ export function productionEnvironment(directory=process.cwd()) {
    if(!/^https:\/\/[a-z]{20}\.supabase\.co\/?$/.test(runtime.SUPABASE_URL)||!runtime.SUPABASE_SECRET_KEY.startsWith('sb_secret_'))throw Error();
    storage.SUPABASE_URL=runtime.SUPABASE_URL;storage.SUPABASE_SECRET_KEY=runtime.SUPABASE_SECRET_KEY;
   }
-  return Object.entries({...base,INDIANAPI_API_KEY:runtime.INDIANAPI_API_KEY.trim(),...storage}).map(([name,value])=>({name,value,isSecret:true}));
+  return Object.entries({...base,INDIANAPI_API_KEY:runtime.INDIANAPI_API_KEY.trim(),...storage,...emailEnvironment(runtime)}).map(([name,value])=>({name,value,isSecret:true}));
  } catch { throw Error('Cloud environment preflight failed. Check .env.local app-role, certificate, operator, IndianAPI and private storage configuration.'); }
 }

@@ -1,0 +1,46 @@
+'use client';
+import { useEffect,useRef,useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import WorkspaceHeader from './workspace-header';
+import { browserAuth } from '@/lib/browser-auth';
+import { localEmailSettings } from '@/app/settings/actions';
+import type { EmailView,EmailSettingsResult,EmailDelivery } from '@/lib/email-contract';
+const date=(s:string)=>new Date(s).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'medium',timeStyle:'short'})+' IST';
+function status(d:EmailDelivery){return d.complainedAt?'Complaint received':d.bouncedAt?'Delivery stopped':d.deliveredAt?'Delivered':({pending:'Queued',sending:'Sending',retry:'Retry scheduled',accepted:'Accepted by Resend',failed:'Delivery failed',uncertain:'Unconfirmed',cancelled:'Cancelled'}[d.state]??d.state);}
+export default function EmailSettings({local,authConfig}:{local:boolean;authConfig:{url:string;key:string}|null}){
+ const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(local||!authConfig),[error,setError]=useState('');
+ const url=authConfig?.url,key=authConfig?.key;
+ useEffect(()=>{
+  if(local||!url||!key)return;let active=true;
+  try{const client=browserAuth(url,key),{data:{subscription}}=client.auth.onAuthStateChange((_event,next)=>{if(active){setSession(next);setReady(true);}});
+   client.auth.getSession().then(({data,error})=>{if(active){setSession(data.session);setReady(true);if(error)setError('Could not restore your session. Sign in again.');}}).catch(()=>{if(active){setReady(true);setError('Could not restore your session.');}});
+   return()=>{active=false;subscription.unsubscribe();};
+  }catch{setReady(true);setError('Browser session storage is unavailable.');}
+ },[local,url,key]);
+ return <div className="private-shell"><WorkspaceHeader active="settings" local={local}/><main id="workspace-content" className="private-content email-settings"><div className="page-heading"><div><span className="eyebrow">A QUIETER WAY TO KEEP UP</span><h1>Email preferences<span className="heading-dot">.</span></h1><p>Get the research that matters to you, without checking every day.</p></div></div>{error&&<p role="alert" className="account-alert error">{error}</p>}{!ready?<p role="status">Restoring your session…</p>:!local&&!session?<section className="panel reading"><h2>Your preferences are private.</h2><p>Sign in with your invited account to manage personal update emails.</p><a className="button-link primary" href="/workspace">Sign in →</a></section>:<Preferences key={local?'local':session!.user.id} local={local} token={session?.access_token} address={session?.user.email}/>}</main></div>;
+}
+function Preferences({local,token,address}:{local:boolean;token?:string;address?:string}){
+ const [data,setData]=useState<EmailView|null>(null),[enabled,setEnabled]=useState(false),[reminders,setReminders]=useState(true),[consent,setConsent]=useState(false);
+ const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState(''),[uncertain,setUncertain]=useState(false),[reload,setReload]=useState(0);
+ const generation=useRef(0),lock=useRef(false);
+ async function request(input?:unknown):Promise<EmailSettingsResult>{
+  if(local)return localEmailSettings(input);
+  const r=await fetch('/api/email/preferences',{method:input?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(input?{'Content-Type':'application/json'}:{})},...(input?{body:JSON.stringify(input)}:{}),cache:'no-store',signal:AbortSignal.timeout(20000)});return {...await r.json(),status:r.status};
+ }
+ useEffect(()=>{const run=++generation.current;setLoading(true);setError('');void request().then(result=>{if(run!==generation.current)return;if(!result.email)throw Error(result.error||'Email settings could not be loaded.');setData(result.email);setEnabled(result.email.preferences.enabled);setReminders(result.email.preferences.reminders);setConsent(false);setUncertain(false);}).catch(e=>{if(run===generation.current)setError(e instanceof Error?e.message:'Could not load settings.');}).finally(()=>{if(run===generation.current)setLoading(false);});return()=>{generation.current++;};},[token,local,reload]);
+ async function save(){
+  if(!data||lock.current||uncertain)return;lock.current=true;setBusy(true);setError('');setMessage('');const run=generation.current;let rejected=false;
+  try{const result=await request({version:data.preferences.version,enabled,reminders,consent:enabled?consent:true});if(run!==generation.current)return;
+   if(!result.email){rejected=!!result.status&&result.status<500&&result.status!==409;throw Error(result.error||'The save could not be confirmed.');}
+   setData(result.email);setConsent(false);setMessage(enabled?'Email preferences saved. Only future publications and eligible reminders will be included.':'Personal update emails are switched off.');
+  }catch(e){if(run===generation.current){setError(e instanceof Error?e.message:'Could not save preferences.');if(!rejected)setUncertain(true);}}finally{lock.current=false;if(run===generation.current)setBusy(false);}
+ }
+ const locked=busy||loading||uncertain,changed=!!data&&(data.preferences.enabled!==enabled||data.preferences.reminders!==reminders);
+ return <>{error&&<div className="account-alert error" role="alert"><span>{error}</span><button disabled={busy} onClick={()=>setReload(n=>n+1)}>Reload settings</button></div>}{message&&<p className="account-alert success" role="status">{message}</p>}{!data?<p role="status">{loading?'Loading your email preferences…':'Settings are unavailable.'}</p>:<><div className="email-settings-grid"><section className="panel reading"><span className={`badge ${data.preferences.enabled?'green':''}`}>{data.preferences.enabled?'Subscribed':'Off by default'}</span><h2>Your personal research brief</h2><p>At most one digest per day, checked from 9 am IST. No new updates or due reminders means no email.</p>{address&&<p className="email-address">Delivered to your verified account address: <strong>{address}</strong></p>}{!data.available&&<p className="account-alert">Email delivery is being configured. Your review inbox continues to work.</p>}{data.preferences.suppressed&&<p className="account-alert error">Delivery was stopped after a bounce or complaint. Contact the beta operator before re-enabling emails.</p>}
+   <label className="email-option"><input type="checkbox" checked={enabled} disabled={locked||(!enabled&&(!data.available||data.preferences.suppressed))} onChange={e=>{setEnabled(e.target.checked);setConsent(false);setMessage('');}}/><span><strong>Published research updates</strong><small>A digest when new reviewed research is available for companies in your holdings or watchlist.</small></span></label>
+   <label className="email-option"><input type="checkbox" checked={reminders} disabled={locked||!enabled} onChange={e=>{setReminders(e.target.checked);setConsent(false);setMessage('');}}/><span><strong>Remind me about deferred reviews</strong><small>Include a reminder when a review reaches the revisit date you chose. Each deferral is reminded once.</small></span></label>
+   {enabled&&changed&&<label className="email-option email-consent"><input type="checkbox" disabled={locked} checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>I want these personal emails at my verified account address. I can unsubscribe at any time.</span></label>}
+   <button className="primary" disabled={locked||!changed||(enabled&&!consent)} onClick={()=>void save()}>{busy?'Saving…':'Save email preferences'}</button><p className="fine-print">Private notes and holding quantities are never included. A message already being sent may still arrive after you switch emails off.</p>
+  </section><aside className="panel reading"><span className="eyebrow">WHAT TO EXPECT</span><h2>Evidence first. Your response follows.</h2><ol className="email-explainer"><li>A new comparison passes human publication review.</li><li>Your digest links directly to the evidence for your tracked company.</li><li>You decide whether to keep, revise, dismiss or defer your view.</li></ol><p>Unapproved drafts, live-price alerts and automatic investment recommendations are not part of these emails.</p><a className="text-button" href="/inbox">Open review inbox →</a></aside></div>
+  <section className="panel reading email-history"><div className="panel-heading"><h2>Recent email activity</h2><button disabled={busy||loading||changed} onClick={()=>setReload(n=>n+1)}>Refresh</button></div><p>Accepted means Resend received the message. Delivered means the receiving mail server accepted it; neither confirms it was read.</p>{data.deliveries.length?<ul>{data.deliveries.map(d=><li key={d.id}><div><strong>Research brief · {d.day}</strong><small>{date(d.createdAt)}</small></div><div><span className={`badge ${d.deliveredAt&&!d.bouncedAt&&!d.complainedAt?'green':''}`}>{status(d)}</span><small>{d.bouncedAt||d.complainedAt?'Further emails have been stopped.':d.deliveredAt?'Confirmed by the receiving mail server.':d.message}</small></div></li>)}</ul>:<p className="email-empty">No email activity yet. Once you opt in, a digest is created only when there is something new to review.</p>}</section></>}</>;
+}
