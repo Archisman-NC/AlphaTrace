@@ -23,4 +23,12 @@ Supabase Auth recovery email is separate from AlphaTrace's Resend update-email w
 
 References: [Supabase custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp), [recovery flow](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail), [sign-out and token expiry](https://supabase.com/docs/reference/javascript/auth-signout).
 
-**Pending:** the second test email address, actual hosted two-account walkthrough, mailbox delivery and final live password-reset confirmation. Automated UI tests or an admin-generated recovery link do not prove inbox delivery.
+## Hosted verification, 9 November 2026
+
+The separate user-supplied test address was created as a confirmed non-operator account. The website allowlist now contains the existing operator and this pilot. Vercel deployment `dpl_3Su2WFLP5WWBqaRiW1oCQZTwJ7ZA` passed and was assigned to production, running commit `3bb489a`.
+
+The actual hosted browser walkthrough passed: fresh empty workspace, TCS selection, topic preferences, refresh/resume, mobile layout, first published comparison without an automatic review decision, explicitly labelled test thesis and response, and persistence after sign-out/sign-in. Operator-only readiness, imports and research endpoints returned `403`; a monitoring command was also denied. Hosted row-level-security checks prevented reads of the other account's private rows in both directions, and the operator's private portfolio/research/onboarding/review fingerprint remained unchanged. This was one real pilot browser session plus database isolation checks; it does not claim a second simultaneous operator browser session.
+
+No research was published and no market-data request was made. Generated test credentials are in the private, ignored `web/.local/pilot-login.txt`, outside version control. The test account and its clearly labelled private records remain available for inspection.
+
+**Live recovery blocker:** an admin-generated recovery link still redirected to `http://localhost:3000/`. The operator was asked to set the Supabase Auth Site URL to `https://alpha-trace-beryl.vercel.app` and allow the exact `https://alpha-trace-beryl.vercel.app/workspace?recovery=1` return URL, retaining existing local URLs. The app's server key cannot edit this management setting. Final live password-reset confirmation and mailbox delivery remain pending. Automated UI tests or an admin-generated recovery link do not prove inbox delivery.
